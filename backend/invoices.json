@@ -1,0 +1,56 @@
+[
+  {
+    "invoice_number": "INV-2026-0605BB7A",
+    "total_amount": "200000.00",
+    "paid_amount": "0.00",
+    "status": "UNPAID",
+    "due_date": "2026-05-05",
+    "academic_year": "",
+    "school_id": "None"
+  },
+  {
+    "invoice_number": "INV-2026-9E4D9EE2",
+    "total_amount": "600000.00",
+    "paid_amount": "0.00",
+    "status": "UNPAID",
+    "due_date": "2026-05-01",
+    "academic_year": "",
+    "school_id": "None"
+  },
+  {
+    "invoice_number": "INV-2026-394E0210",
+    "total_amount": "605000.00",
+    "paid_amount": "0.00",
+    "status": "OVERDUE",
+    "due_date": "2026-04-30",
+    "academic_year": "",
+    "school_id": "None"
+  },
+  {
+    "invoice_number": "INV-2026-415B7AFA",
+    "total_amount": "205000.00",
+    "paid_amount": "0.00",
+    "status": "UNPAID",
+    "due_date": "2026-05-02",
+    "academic_year": "",
+    "school_id": "None"
+  },
+  {
+    "invoice_number": "INV-2026-628ECC88",
+    "total_amount": "166375.00",
+    "paid_amount": "166375.00",
+    "status": "PAID",
+    "due_date": "2026-04-15",
+    "academic_year": "2026-2027",
+    "school_id": "183b4efc-cebf-48d3-94c2-5ad2affe7d3b"
+  },
+  {
+    "invoice_number": "INV-2026-755306D4",
+    "total_amount": "805000.00",
+    "paid_amount": "0.00",
+    "status": "UNPAID",
+    "due_date": "2026-05-02",
+    "academic_year": "",
+    "school_id": "None"
+  }
+]

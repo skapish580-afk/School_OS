@@ -1,0 +1,27 @@
+Django==4.2.16
+djangorestframework==3.15.2
+djangorestframework-simplejwt==5.3.1
+django-cors-headers==4.3.1
+django-filter==24.3
+Pillow==10.4.0
+reportlab>=4.0.0
+
+# PostgreSQL Support (Production)
+psycopg2-binary==2.9.9
+
+# Environment Variables
+python-decouple==3.8
+python-dotenv==1.1.0
+
+# Date utilities
+python-dateutil==2.8.2
+
+# Optional: Better performance
+django-redis==5.4.0
+
+# Data Processing
+openpyxl==3.1.2
+razorpay==2.0.1
+
+# Timezone Lookup
+timezonefinder==8.2.4

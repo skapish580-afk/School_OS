@@ -1,0 +1,74 @@
+[
+  {
+    "id": "970b8bf5-db7f-44db-a56c-82b747a2bda2",
+    "student": 7,
+    "student_name": "Ashish Chanchalani",
+    "student_suid": "S-GWD--2026-94208D-6",
+    "grade_name": "11",
+    "academic_year": "2026-2027",
+    "total_charges": "250000.00",
+    "total_payments": "0.00",
+    "current_balance": "250000.00",
+    "is_cleared": false
+  },
+  {
+    "id": "9018720e-21a0-4ac5-a8d3-ee066c922ecf",
+    "student": 4,
+    "student_name": "Janhvi Sharma",
+    "student_suid": "S-GWD--2026-2B8DCD-6",
+    "grade_name": "11",
+    "academic_year": "2026-2027",
+    "total_charges": "250000.00",
+    "total_payments": "0.00",
+    "current_balance": "250000.00",
+    "is_cleared": false
+  },
+  {
+    "id": "e7c2280e-e54d-44fa-b146-ac06352954e8",
+    "student": 6,
+    "student_name": "steve rogers",
+    "student_suid": "S-GWD--2026-F08638-9",
+    "grade_name": "11",
+    "academic_year": "2026-2027",
+    "total_charges": "250000.00",
+    "total_payments": "0.00",
+    "current_balance": "250000.00",
+    "is_cleared": false
+  },
+  {
+    "id": "b6f1eeec-4332-4f6a-b387-257f563cdda5",
+    "student": 5,
+    "student_name": "steven strange",
+    "student_suid": "S-GWD--2026-13FE6E-6",
+    "grade_name": "11",
+    "academic_year": "2026-2027",
+    "total_charges": "250000.00",
+    "total_payments": "0.00",
+    "current_balance": "250000.00",
+    "is_cleared": false
+  },
+  {
+    "id": "a32f774b-758e-40e0-b92f-28b2f256d8ff",
+    "student": 2,
+    "student_name": "kapish Shukla",
+    "student_suid": "S-GWD--2026-3FBE0A-8",
+    "grade_name": "12",
+    "academic_year": "2025-2026",
+    "total_charges": "8000.00",
+    "total_payments": "0.00",
+    "current_balance": "8000.00",
+    "is_cleared": false
+  },
+  {
+    "id": "e0e13e87-9478-491e-93b3-296fc63d974f",
+    "student": 3,
+    "student_name": "krish",
+    "student_suid": "S-GWD--2026-20D70B-0",
+    "grade_name": "12",
+    "academic_year": "2025-2026",
+    "total_charges": "9500.00",
+    "total_payments": "0.00",
+    "current_balance": "9500.00",
+    "is_cleared": false
+  }
+]

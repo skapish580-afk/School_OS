@@ -1,0 +1,87 @@
+import React from 'react';
+import { StyleSheet } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { LoginScreen } from './src/screens/LoginScreen';
+import { StudentDashboardScreen } from './src/screens/StudentDashboardScreen';
+import { TeacherDashboardScreen } from './src/screens/TeacherDashboardScreen';
+
+const Stack = createNativeStackNavigator();
+
+const RootNavigator = () => {
+  const { user, userType, isAuthenticated } = useAuth();
+
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: true,
+        animationEnabled: true,
+        cardStyle: { backgroundColor: '#fff' },
+      }}
+    >
+      {!isAuthenticated ? (
+        // Auth Stack
+        <Stack.Group
+          screenOptions={{
+            headerShown: false,
+            animationAnimation: false,
+          }}
+        >
+          <Stack.Screen name="Login" component={LoginScreen} />
+        </Stack.Group>
+      ) : (
+        // App Stack
+        <Stack.Group
+          screenOptions={{
+            headerShown: true,
+            animationEnabled: false,
+          }}
+        >
+          {userType === 'STUDENT' ? (
+            <Stack.Screen
+              name="StudentDashboard"
+              component={StudentDashboardScreen}
+              options={{
+                title: 'My Dashboard',
+                headerStyle: { backgroundColor: '#3498db' },
+                headerTintColor: '#fff',
+                headerTitleStyle: { fontWeight: 'bold' },
+              }}
+            />
+          ) : (
+            <Stack.Screen
+              name="TeacherDashboard"
+              component={TeacherDashboardScreen}
+              options={{
+                title: 'My Classes',
+                headerStyle: { backgroundColor: '#9b59b6' },
+                headerTintColor: '#fff',
+                headerTitleStyle: { fontWeight: 'bold' },
+              }}
+            />
+          )}
+        </Stack.Group>
+      )}
+    </Stack.Navigator>
+  );
+};
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <NavigationContainer>
+        <RootNavigator />
+      </NavigationContainer>
+    </AuthProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

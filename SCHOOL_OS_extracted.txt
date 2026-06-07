@@ -1,0 +1,4343 @@
+SCHOOL OS
+
+The Unified Student Lifecycle & Institutional Management Platform
+
+School OS is not just another School Management System; it is a Life-Cycle Platform. While traditional ERPs focus on the institution (fees, payroll, inventory), School OS shifts the paradigm to focus on the individual (the student and teacher).
+
+By building a multi-tenant, cloud-based network, we solve the two biggest failures in EdTech today: the fragmentation of daily operations and the total loss of a student's history upon graduation. We are building the "LinkedIn for K-12"—starting as a utility tool for schools and evolving into a lifelong professional identity network for students.
+
+________________________________________
+
+2. The Problem Statement: "The Great Disconnect"
+
+Despite the digitalization of the world, the Indian K-12 education sector remains largely fragmented and data-poor.
+
+A. The Operational Fragmentation (The "App Fatigue")
+
+Schools today are forced to stitch together disconnected tools.
+
+•The Reality: A typical private school uses one software for accounting (Tally), another for communication (WhatsApp/SMS), a third for exams, and physical paper for the most critical data—student history.
+
+•The Cost: Teachers spend an estimated 20-30% of their time on non-teaching administrative data entry.
+
+•The Data Silo: When a student transfers from School A to School B, the new school starts from zero. There is no digital handover of medical history, learning curves, or behavioral records.
+
+B. The "Data Graveyard" (The Lost History)
+
+Every year, a student generates hundreds of valuable data points:
+
+•Academic: Grades, Project submissions, Olympiad rankings.
+
+•Extracurricular: Sports Day photos, Debate certificates, Drama performances.
+
+•Soft Skills: Teacher remarks on leadership, punctuality, and empathy.
+
+The Failure: Currently, this data "dies" the moment the academic year ends. When a student graduates after 14 years (LKG to 12th), they leave with nothing but a final marksheet. Their "journey"—the proof of their holistic development—is deleted or lost in a dusty store room.
+
+C. The Alumni Void
+
+Indian schools sit on a goldmine of alumni networks but fail to mine it.
+
+•Once a student leaves, the relationship is severed.
+
+•Schools have no live database of where their alumni are working or studying.
+
+•Current "Alumni Portals" are dead websites because they require ex-students to manually sign up 5 years later.
+
+________________________________________
+
+3. Market Opportunity & Data Validation
+
+The scale of this opportunity in India is staggering.
+
+•Total Addressable Market (TAM): India has approximately 1.5 Million+ schools (K-12), catering to over 260 Million students. It is the largest K-12 system in the world.
+
+•The Private Sector Wedge: There are over 350,000 private unaided schools in India. These are the primary target for School OS, as they compete on brand value and parent satisfaction.
+
+•The Shift: According to recent EdTech reports, the Indian School ERP market is projected to grow at a CAGR of 14-16%, but most growth is in "Smart Classrooms" (hardware). The "Institutional Management" (Software) space is still dominated by legacy players with poor UI/UX.
+
+________________________________________
+
+4. The Solution: "One OS, Infinite Possibilities"
+
+School OS is a centralized, cloud-native platform that serves three distinct stakeholders simultaneously.
+
+The "Trojan Horse" Strategy
+
+We do not sell "Student Profiles." We sell the Best-in-Class School ERP. Once the school adopts our tool for daily operations, the Student Profile is built automatically in the background.
+
+Core Modules & Innovations:
+
+1. For the School: "Operational Autopilot"
+
+•Unified Dashboard: A single login for Fees, Admissions, Payroll, and Timetables.
+
+•Smart Transfer Protocol: When a new student joins from another "School OS" partner, the admin enters a unique ID. The system instantly imports their past academic records, medical data, and certificates (with parent consent). Zero data entry required.
+
+•Teacher Efficiency Scorecard: A data-driven profile for teachers that tracks their attendance, syllabus completion, and class performance—giving schools a verified metric for appraisals.
+
+2. For the Student: "The Digital Vault" (The USP)
+
+•Automated Portfolio: As teachers upload event photos or exam grades, the system tags the student.
+
+•The Timeline: A visual "Facebook-style" feed of their growth from Age 4 to Age 18.
+
+•The Graduation Trigger: On the day of convocation, the "Student" account seamlessly converts to an "Alumni" account. They retain access to their Vault forever.
+
+3. For the Network: "The Community Layer"
+
+•Global Alumni Directory: A search engine for ex-students across the entire School OS network (filtered by school).
+
+•Parent Connect (Future): A moderated social platform for parents to discuss localized issues (e.g., "Best bus service in Andheri," "Math tutors in Delhi").
+
+________________________________________
+
+5. The Architecture: Built for Scale
+
+To achieve the "Network Effect," School OS creates a Global Identity for every user.
+
+•Multi-Tenant Cloud: One codebase serves thousands of schools. Updates are instant for everyone.
+
+•Portable Identity: A user’s ID (Teacher or Student) is independent of the school. If a teacher moves from School A to School B, their "Verified Experience History" travels with them.
+
+________________________________________
+
+6. Vision: The Reputation Economy
+
+In the next decade, a university or employer will not just ask "What was your GPA?"; they will ask "Who are you?".
+
+School OS answers that question. We are moving the industry from "Record Keeping" to "Legacy Building." We are not just managing schools; we are preserving the history of the next generation.
+
+A.ROLE HIERACHY
+
+a.Level 0: The System Super-Admin (You & Your Team)
+
+b.Level 1: The School Management (Trustee / Owner
+
+c.Level 2: The School Administrator (Principal / Vice-Principal)
+
+d.Level 3: The Staff (Teaching & Non-Teaching)
+
+•Sub-Role A: The Teacher
+
+•Sub-Role B: The Accountant / Clerk
+
+e.Level 4: The End User (Consumer)
+
+•Sub-Role A: The Student (Active)
+
+•Sub-Role B: The Parent
+
+•Sub-Role C: The Alumni (Graduated Student)
+
+LEVEL 4: ROLE – STUDENT (Master Data Specification)
+
+Scope: This document defines all possible student-level data fields in a flattened conceptual model (no tables, no services).
+
+Each field includes:
+
+•Field Name (snake_case)
+
+•Description
+
+•Source: Provided by School / Parent / System-generated
+
+•Required: Mandatory or Optional
+
+•Visibility: School / Parent / Student / System-only
+
+•CRUD: Who can Create / Read / Update / Delete
+
+________________________________________
+
+1. STUDENT CORE IDENTITY
+
+1.1 System Identity
+
+•student_global_id – Unique lifelong ID across School OS network
+
+(System | Mandatory | System-only | CRUD: System)
+
+•school_student_id – School-specific admission ID
+
+(School | Mandatory | School/Admin | CRUD: School)
+
+•admission_number – Official admission number (immutable)
+
+(School | Mandatory | School/Admin | CRUD: School – Update locked)
+
+________________________________________
+
+1.2 Name & Basic Profile
+
+•first_name – Student first name
+
+(Parent/School | Mandatory | All | CRUD: Parent/School)
+
+•middle_name – Student middle name
+
+(Parent/School | Optional | All | CRUD: Parent/School)
+
+•last_name – Student last name
+
+(Parent/School | Mandatory | All | CRUD: Parent/School)
+
+•preferred_name – Name student prefers to be called
+
+(Student/Parent | Optional | School/Student | CRUD: Student/Parent)
+
+•date_of_birth – DOB
+
+(Parent | Mandatory | School/Parent | CRUD: Parent – Update locked after verification)
+
+•gender – Male/Female/Other
+
+(Parent | Mandatory | School | CRUD: Parent)
+
+•profile_photo_current – Latest active photo
+
+(School | Mandatory | All | CRUD: School)
+
+•profile_photo_history – Historical photos (year-wise)
+
+(System | Auto | School/Parent/Student | CRUD: System)
+
+________________________________________
+
+2. DEMOGRAPHIC & SOCIAL DETAILS
+
+•religion – Religion (if disclosed)
+
+(Parent | Optional | School | CRUD: Parent)
+
+•category – GEN / OBC / SC / ST
+
+(Parent | Optional | School | CRUD: Parent)
+
+•minority_status – Minority (Yes/No)
+
+(Parent | Optional | School | CRUD: Parent)
+
+•mother_tongue – Primary language spoken at home
+
+(Parent | Optional | School | CRUD: Parent)
+
+•languages_known – List of languages
+
+(Parent/Student | Optional | School | CRUD: Parent/Student)
+
+•is_rte_student – Right to Education beneficiary
+
+(School | Conditional | School/System | CRUD: School)
+
+•fee_concession_applicable – Any concession applicable
+
+(School | Optional | School | 
+
+_global_id)
+
+(System | Mandatory | System-only)
+
+•linked_parent_ids[] (FK → parent_global_id)
+
+(System | Mandatory | Read-only) CRUD: School)
+
+Proximity from school:
+
+Train concession[] system
+
+________________________________________
+
+•3. PARENT / GUARDIAN LINKING (ID-BASED – FIXED)
+
+•3.1 Parent References
+
+•primary_parent_id (FK → parent
+
+•🔹 Names, phone numbers, emails are NOT duplicated here
+
+🔹 They are read from the Parent module
+
+•________________________________________
+
+•3.2 Financial & Control Mapping
+
+•fee_paying_parent_id (FK → parent_global_id)
+
+(School | Mandatory)
+
+•pickup_allowed_parent_ids[] (FK → parent_global_id)
+
+•emergency_contact_parent_id (FK → parent_global_id)
+
+•//parent_consent_timestamp (System | Auto
+
+________________________________________
+
+4. ADDRESS & LOCATION
+
+•current_address_line_1
+
+•current_address_line_2
+
+•current_city
+
+•current_state
+
+•current_pincode
+
+•permanent_address_same_as_current (Yes/No)
+
+•permanent_address_full
+
+•birth_place
+
+•nationality
+
+•address_latitude
+
+•address_longitude
+
+•address_proof_type – Aadhaar/Passport/etc
+
+(Source: Parent | Required: Mandatory | Visibility: School | CRUD: Parent)
+
+________________________________________
+
+5. ACADEMIC IDENTITY
+
+•academic_board – CBSE / ICSE / State
+
+•admission_type – Regular / RTE / Management
+
+•is_transfer_student (Yes/No)
+
+•date_of_joining
+
+•date_of_leaving
+
+•current_class
+
+•current_section
+
+•current_roll_number
+
+•house_color
+
+•stream_selected – Science/Commerce/Arts (if applicable) OPTIONAL SUBJECTS
+
+•subjects_selected – List
+
+(Source: School | Mandatory | Visibility: School/Student | CRUD: School)
+
+________________________________________
+
+6. MEDICAL & SAFETY (CONFIDENTIAL)
+
+•blood_group
+
+•allergies[]
+
+•chronic_conditions[]
+
+•height_cm
+
+•weight_kg
+
+•vision_left
+
+•vision_right
+
+•dental_condition
+
+•vaccination_status
+
+•physical_disability
+
+•learning_disability
+
+•identification_marks
+
+•fitness_clearance_valid_till
+
+•medication_consent (boolean)
+
+•chronic_flags JSONB 
+
+•-- e.g. { "asthma": true, "diabetes": false }
+
+(Visibility: School/Medical Staff only | CRUD: Parent/School)
+
+________________________________________
+
+7. GOVERNMENT IDENTIFIERS (RESTRICTED)
+
+•
+
+•aadhaar_last_4_digits
+
+•apaar_id NATIONAL LEVEL
+
+•pen_id STATE LEVEL
+
+(Visibility: System-only | CRUD: System)
+
+________________________________________
+
+8. DIGITAL VAULT (LIFELONG MEMORY)
+
+8.1 Academic & Memory Artifacts
+
+•annual_report_cards[]
+
+•class_photographs[]
+
+•individual_photographs_yearly[] STACK
+
+•teacher_testimonials[]
+
+•achievements[]
+
+•awards[]
+
+•recognition_level – School/Inter-school/State/National
+
+8.2 Document Metadata
+
+•document_type
+
+•issuing_authority
+
+•document_verified (Yes/No)
+
+•//reupload_count
+
+•document_expiry_date
+
+•download_history[]
+
+(Visibility: Student/Parent | CRUD: School (create), Student (read))
+
+________________________________________
+
+9. ATTENDANCE & DISCIPLINE[]
+
+•daily_attendance_records[]
+
+•absence_reason_code[]
+
+•medical_leave_applied[]
+
+•medical_leave_approved[]
+
+•late_in_flag
+
+•half_day_flag
+
+•attendance_percentage_monthly
+
+•attendance_percentage_annual
+
+Discipline
+
+•incident_date[]
+
+•incident_type[]
+
+•incident_severity
+
+•reported_by_teacher_id (FK → teacher_global_id)action_taken
+
+•parent_acknowledged
+
+•counselling_required
+
+•suspension_start_date
+
+•suspension_end_date
+
+•house_points_deduct
+
+________________________________________
+
+10. EXAMS, PROJECTS & ACTIVITIES //research more 
+
+•  exam_marks[]dict
+
+•  project_submission_status
+
+•  project_mentor_teacher_id (FK → teacher_global_id)
+
+•  promotion_status
+
+•internal_assessment_marks
+
+•practical_theory_split
+
+•class_rank
+
+•grace_marks_applied
+
+•project_plagiarism_flag
+
+•late_submission_penalty
+
+•activity_participation_level
+
+________________________________________
+
+11. FEES & FINANCIAL STATUS
+
+•fee_structure_type
+
+•fee_payment_cycle
+
+•total_fees_due
+
+•fees_paid_amount
+
+•fees_pending_amount
+
+•penalty_charges
+
+•payment_mode
+
+•cheque_bounce_history
+
+•refund_issued
+
+•fee_waiver_reason
+
+•sibling_discount_applied
+
+•outstanding_clearance_flag
+
+________________________________________
+
+12. TRANSPORT, LIBRARY & FACILITIES
+
+Transport
+
+•transport_opted
+
+•transport_mode
+
+•bus_number
+
+•pickup_stop
+
+•drop_stop
+
+•route_name
+
+•bus_attendance[]-Library
+
+•books_issued[]
+
+•books_returned[]
+
+•fine_imposed
+
+•digital_resources_accessed[]
+
+olibrary_card_number (Text | Optional | If using legacy cards).
+
+library_clearance_flag (Boolean | Required for Leaving Cert).
+
+•
+
+Labs
+
+•lab_access_granted
+
+•practical_exam_records[]
+
+________________________________________
+
+13. DIGITAL ACCESS & BEHAVIOR student app
+
+Parent is the core user from lkg to 5th std
+
+6th child phone dediya 
+
+•student_login_enabled
+
+•student_username
+
+•last_login_timestamp
+
+•device_type
+
+•pasrental control[]
+
+•content_flagged[]
+
+________________________________________
+
+14. EXIT, CERTIFICATES & ALUMNI boolean
+
+•exit_reason_category
+
+•exit_initiated_by
+
+•transfer_certificate_number
+
+•character_certificate_generated
+
+•bonafide_certificate
+
+•fee_clearance_confirmed
+
+•library_clearance_confirmed
+
+•transport_clearance_confirmed
+
+•
+
+________________________________________
+
+END OF STUDENT MASTER SPECIFICATION
+
+This document defines the complete student digital twin for School OS, covering operations, memory, compliance, and lifelong identity.
+
+________________________________________
+
+➕ ADDITION 2: DIETARY & CANTEEN INFORMATION (Medical Context)
+
+Field Name: dietary_preference
+
+Type: Enum
+
+Values: Veg / Non-Veg / Jain / Halal / Allergy-specific (e.g., Nut Allergy)
+
+Provided By: Parent
+
+Required: Optional (School-configurable)
+
+Visibility: School, Medical Staff, Trip Coordinators
+
+CRUD (Student Level): Read-only
+
+________________________________________
+
+➕ ADDITION 3: GENERAL ASSETS ISSUED (Assets / Library / Labs Context)
+
+Field Name: assets_issued_list[]
+
+Sub-fields: Item Name, Asset ID, Date Issued, Return Status
+
+Provided By: School
+
+Visibility: Admin, Library, Sports, Labs
+
+CRUD (Student Level): Read-only
+
+Purpose: Exit clearance, asset tracking beyond library books
+
+________________________________________
+
+➕ ADDITION 4: FUTURE-PROOF DYNAMIC ATTRIBUTES (Core Student Object)
+
+Field Name: custom_attributes
+
+Type: JSON / Key-Value Store
+
+Provided By: System / School / Govt (as applicable)
+
+Visibility: Configurable
+
+CRUD (Student Level): Read-only
+
+Purpose: Store new or government-mandated fields without schema changes
+
+________________________________________
+
+TEACHER
+
+1. CORE IDENTITY (System Anchor)
+
+•teacher_global_id (System | Required | Globally unique across School OS network)
+
+•teacher_school_id (System | Required | Unique per school)
+
+•first_name (School | Required)
+
+•middle_name (School | Optional)
+
+•last_name (School | Required)
+
+•title[Mr, Miss, Mrs, Dr] (School|System| Required)
+
+•date_of_birth (School | Required)
+
+•gender (School | Required)
+
+•marital_status (School | Optional)
+
+•place_of_birth (School | Optional)
+
+•profile_photo_current (School | Required)
+
+•profile_photo_history[] (System | Auto) 
+
+CLASS PHOTOGRAPHS
+
+•custom_attributes (System | JSON | Future / Govt / Board fields)
+
+________________________________________
+
+2. CONTACT & ADDRESS
+
+•personal_email (Teacher | Required)
+
+•official_email (System | Assigned)
+
+•mobile_number (Teacher | Required)
+
+•emergency_contact_number (Teacher | Optional)
+
+•current_address (Teacher | Required)
+
+•permanent_address (Teacher | Optional)
+
+Long /lat
+
+Proximity from school
+
+________________________________________
+
+3. GOVERNMENT & LEGAL IDENTIFIERS
+
+•     PAN CARD 
+
+•aadhaar_last_4_digits (System)
+
+•govt_employee_id (School | Optional)
+
+•teacher_license_or_board_id (School | Optional)
+
+•document_verification_status (System | Pending / Verified / Rejected)
+
+________________________________________
+
+4. PROFESSIONAL & ACADEMIC PROFILE-
+
+•highest_qualification (School | Required)
+
+•all_degrees[] (Degree, Institute, Year)
+
+•work_experience_years (School | Required)
+
+•prior_institutions[] (Optional)
+
+•subjects_expertise[] (Required)
+
+•boards_eligible[] (CBSE / ICSE / IB / IGCSE etc)
+
+•research_papers_published[] (Optional)
+
+•books_published[] (Optional)
+
+•awards_and_recognition[] (Optional)
+
+•linkedin_profile_url (Optional)
+
+•self_summary_bio (Optional | Parent-visible if enabled)
+
+________________________________________
+
+5. EMPLOYMENT & ROLE CLASSIFICATION
+
+•teacher_type (Teaching / Non-Teaching)
+
+•teacher_category (Pre-Primary / Primary / Secondary / Sr Secondary)
+
+•designation (Teacher / HOD / VP / Coordinator)
+
+•department (Required)
+
+•employment_type (Full-time / Part-time / Visiting / Contract)
+
+________________________________________
+
+6. CLASS, SUBJECT & BOARD RESPONSIBILITIES
+
+Class Teacher Mapping
+
+•is_class_teacher bool (System | Derived)
+
+•class_teacher_of (Grade + Section | One only)
+
+Subject Teacher Mapping
+
+•subject_assignments{
+
+osubject
+
+ograde
+
+osection
+
+oboard
+
+}
+
+Timetable Mapping teacher’s timetable  not editable by teacher //more research
+
+•timetable_slots[]
+
+oday_of_week
+
+operiod_number[]
+
+oroom_number[]
+
+subject[]]
+
+grade section[]
+
+________________________________________
+
+7. WORKLOAD & SUBSTITUTION (Operational Core)
+
+•max_weekly_periods (School defined)
+
+•current_weekly_periods (System | Derived)
+
+•free_periods_today[] (System | Derived)
+
+•is_available_for_substitution (System | Boolean)
+
+•substitution_history_log[]
+
+•substitution_counter_monthly (Used for reporting / pay if enabled)
+
+________________________________________
+
+8. ACCESS, AUTHORITY & PERMISSIONS[dcl no table req]
+
+•accessible_student_scope (System | Derived)
+
+oOwn class → Full
+
+oSame category diff class teacher  → Read / Limited
+
+•attendance_marking_permission
+
+oFull-day (Class Teacher)
+
+oPeriod-wise (Subject Teacher if enabled)
+
+•remarks_permission
+
+Table req
+
+oGood remarks[]
+
+oBad remarks[]
+
+oIncident initiation[]
+
+•parent_notification_permission
+
+•appointment_management_permission
+
+________________________________________
+
+9. DAILY OPERATIONS & SYSTEM LOGS
+
+•daily_login_log[] (System)
+
+•biometric_attendance_log[]
+
+oarrival_time
+
+odeparture_time
+
+oearly_leave_flag
+
+•leave_requests[] (Approval workflow)
+
+•daily_teaching_log[]
+
+olessons_taught
+
+ohomework[]
+
+oactivities
+
+________________________________________
+
+10. STUDENT INTERACTION & DIGITAL CLASS MANAGEMENT  features/no table req
+
+•can_view_student_full_history bool
+
+•can_add_homework bool
+
+•can_add_assignments bool
+
+•can_add_activity_records
+
+•can_write_testimonials
+
+•can_create_student_groups (Remedial / Olympiad / Custom)
+
+•broadcast_permission_scope
+
+oOwn class
+
+oWhole grade
+
+oSpecific groups
+
+•content_approval_required (HOD / Principal)
+
+________________________________________
+
+11. COMMUNICATION & MEETINGS
+
+•received_parent_appointment_requests[]
+
+•teacher_initiated_meeting_requests[]
+
+•meeting_history[]
+
+________________________________________
+
+12. ACADEMIC RESOURCES & INFRASTRUCTURE
+
+•//syllabus_access_enabled
+
+•lab_access_permissions
+
+•lab_availability_view read only
+
+________________________________________
+
+13. LIBRARY & GENERAL ASSETS
+
+•library_books_issued[]
+
+•library_fine_applicable (Configurable)
+
+•assets_issued_list[]
+
+oasset_name
+
+oasset_id
+
+oissue_date
+
+oreturn_status
+
+________________________________________
+
+14. TIMETABLE SELF-SERVICE
+
+•personal_timetable (System) feature
+
+•timetable_change_requests[] (Approval workflow) history maintained
+
+________________________________________
+
+15. MULTI-SCHOOL & TRANSFER SUPPORT
+
+•associated_school_ids[]
+
+•transfer_history[]
+
+________________________________________
+
+16. PAYROLL VISIBILITY (Non-Calculative)
+
+•payroll_employee_reference_id
+
+•salary_status (Paid / Pending / Hold)
+
+•last_salary_paid_month
+
+•payslip_document_link
+
+________________________________________
+
+17. PERFORMANCE & APPRAISAL (Confidential)
+
+•annual_appraisal_rating (1–5)
+
+•lesson_observation_notes[]
+
+•punctuality_index (Derived from attendance)
+
+________________________________________
+
+18. EXIT / DEACTIVATION
+
+•exit_reason
+
+•exit_date
+
+•handover_completed_flag  noticeperiod duties
+
+•account_deactivated_timestamp
+
+•
+
+LEVEL 4: ROLE — PARENT / GUARDIAN
+
+The legal, financial, and operational controller of one or more students.
+
+This is a merged conceptual view of a Parent entity (not table design). All fields listed represent what the system can know if all data were merged.
+
+________________________________________
+
+•CORE IDENTITY (Login & Audit Anchor)
+
+• parent_global_id (System | Required | Globally unique across School OS | Visible: Admin only | CRUD: System)
+
+• login_mobile_number (Parent | Required | Primary Login ID | OTP verified | Visible: Parent, Admin)
+
+• login_email (Parent | Optional | Secondary Login | Verified | Visible: Parent, Admin)
+
+• first_name (Parent | Required | Visible: Parent, Admin)
+
+• middle_name (Parent | Optional | Visible: Parent, Admin)
+
+• last_name (Parent | Required | Visible: Parent, Admin)
+
+• profile_photo (Parent | Optional | Visible: School Security, Admin)
+
+• preferred_language (Parent | Optional | App UI language)
+
+• account_status (System | Active / Suspended / Closed)
+
+• custom_attributes (System | Dynamic JSON | Future-proof govt / school requirements)
+
+•authorized_pickup_faces (List of Photos for AI matching - Optional Future Feature).
+
+________________________________________
+
+•FAMILY & STUDENT LINKING (Critical Layer)
+
+• linked_student_ids[] (FK → student_global_id) (System | Required | Auto-linked via admission | Visible: Parent)
+
+• relation_map (JSON | {student_id: Father/Mother/Guardian})
+
+• primary_contact_flag_map (JSON | {student_id: true/false})
+
+• custody_access_map (JSON | {student_id: Full / Limited / View-Only})
+
+• //sibling[] (System | Derived | Used for fee logic & dashboard switcher)
+
+________________________________________
+
+1.SHARED FAMILY VISIBILITY MODEL (Design Principle)
+
+• family_dashboard (System | Shared across all linked parents) feature 
+
+• action_audit_visibility (System | All parents can see all actions)eg fees paid , student is taken back home
+
+• actor_attribution_enabled (System | Shows which parent performed which action) eg which parent paid fees 
+
+________________________________________
+
+2.STUDENT CONTROL & PERMISSION SWITCHES
+
+• student_login_enabled_map (JSON | Parent-controlled | {student_id: true/false})
+
+• student_content_visibility_rules (JSON | Parent-controlled)
+
+3.exam_marks_visible_to_student (Yes/No)
+
+4.report_card_visible_to_student (Yes/No)
+
+• future feature spending_limits_map (JSON | Parent | Canteen / Store daily limits) student side data field need 
+
+• digital_consent_flags (JSON | Parent approvals)
+
+5.photo_usage_consent
+
+6.medical_emergency_consent
+
+7.field_trip_consent
+
+________________________________________
+
+4.FINANCIAL PROFILE (Family Wallet)
+
+• //pan_number_hashed (System | Required for tax certificates | Encrypted)
+
+• pan_last_4_digits (System | Visible: Parent)
+
+• //gst_number (Parent | Optional | Business claims)
+
+• billing_address (Parent | Required)
+
+•// saved_payment_methods[] (System | Tokenized only | Cards / UPI | No raw data)
+
+• //family_wallet_balance (System | Ledger-based)
+
+• fee_payment_history[] (System | Auto | Across all linked students)
+
+•receipt_id
+
+•amount
+
+•student_ids
+
+•paid_by_parent_id (FK → parent_global_id)payment_mode
+
+•timestamp
+
+• refund_history[] (System)
+
+• tax_certificates[] (System | Auto-generated | 80C etc.)
+
+________________________________________
+
+5.GOVERNMENT & KYC
+
+• //aadhaar_hash (System | Encrypted)
+
+• aadhaar_last_4_digits (System | Visible: Parent)
+
+• //kyc_status (System | Pending / Verified / Rejected)
+
+• address_proof_document_link (System)
+
+• identity_verification_log[] (System | Audit)
+
+________________________________________
+
+•COMMUNICATION & PERMISSIONS
+
+• //can_chat_with_teachers (School | Boolean | Configurable)
+
+• appointment_request_permission (School | Boolean | Default: True)
+
+• appointment_requests_history[] (System | Auto | Teacher, Date, Status)
+
+• parent_to_teacher_private_reporting_enabled (School | Boolean)twp fields
+
+• parent_to_teacher_private_reporting_desc (School | Boolean)twp fields
+
+• incident_reports_submitted[] (Parent | Confidential | Auto-hidden from Student)
+
+o incident_type
+
+o description
+
+o supporting_documents[]
+
+o submitted_to (teacher_global_id / admin)
+
+o status (Submitted / Acknowledged / Action Taken)
+
+• parent_comments_on_student[] (Parent | Optional | Contextual)
+
+o comment_text
+
+o visibility (Teacher only / Admin + Teacher)
+
+o linked_student_id
+
+• notification_preferences (JSON | {"fee_due": "SMS", "homework": "App_Only", "bus_delay": "Call"})
+
+• circulars_acknowledged_log[] (System | Legal Audit) & NOTIFICATIONS
+
+• notification_preferences (JSON)
+
+6.fees (SMS / App / Email)
+
+7.attendance (App)
+
+8.homework (App)
+
+9.emergency (Call)
+
+• circular_acknowledgement_log[] (System | Legal audit trail)
+
+• message_read_receipts (System)
+
+________________________________________
+
+7.APPOINTMENTS & INTERACTIONS
+
+• appointment_requests_sent[] (Parent)
+
+• appointment_requests_received[] (Teacher initiated)
+
+• meeting_history[] (System | Auto)
+
+• feedback_submitted[] (Parent | Optional)
+
+________________________________________
+
+•LOGISTICS & GATE PASS
+
+• authorized_pickup_persons[] (Parent | Optional)
+
+8.name
+
+9.relation
+
+10.photo
+
+11.id_proof
+
+• authorized_pickup_vehicles[] (Parent | Optional)
+
+12.vehicle_number
+
+13.driver_name
+
+• gate_pass_generation_enabled (School | Boolean)
+
+• gate_pass_history[] (System | QR based | Audit)
+
+• live_bus_tracking_access (System | Based on transport enrollment)
+
+________________________________________
+
+9.COMMUNITY & SCHOOL RELATIONSHIP
+
+• is_school_alumni (System | Boolean)
+
+• is_school_staff (System | Boolean | Used for fee rules)
+
+• pta_membership_status (School | Boolean)
+
+• volunteer_interest_tags[] (Parent | Optional)
+
+________________________________________
+
+•SYSTEM ACTIVITY & SECURITY
+
+• last_login_timestamp (System)
+
+• login_device_history[] (System | Audit)
+
+• failed_login_attempts (System)
+
+• consent_history_log[] (System)
+
+________________________________________
+
+10.EXIT / DE-LINKING
+
+• student_unlink_requests[] (Parent | Approval required)
+
+• account_closure_requested (Parent | Boolean)
+
+• account_closure_timestamp (System)
+
+________________________________________
+
+DESIGN GUARANTEE
+
+• Each parent has a unique login
+
+• All parents share the same family data
+
+• Every action is visible to all parents
+
+• Actor attribution is always preserved
+
+• Permissions differ only if explicitly configured
+
+ROLE — SCHOOL ADMIN (The Tenant Manager)
+
+Scope: The single point of control for one specific school. They configure rules, buy features, hire staff, and delegate power safely.
+
+1. CORE IDENTITY (The "Key Holder")
+
+•admin_global_id (System | Required | Unique across School OS)
+
+•school_tenant_id (System | The Anchor | Links them to only this school)
+
+•username (System | Required | e.g., admin@dps-mumbai)
+
+•password_hash (System | Encrypted | MFA Enabled)
+
+•full_name, official_email, mobile_number
+
+•designation (School | e.g., "Principal", "Vice Principal", "Registrar")
+
+•admin_type (Enum | Super_Admin / Sub_Admin)
+
+•//security_device_config
+
+2. GOVERNANCE & AUTHORITY (The "Safety" Layer)
+
+Refined with your "Intent-Based Override" and "Audit" logic.
+
+•access_scope_definition (JSON | The Ability)
+
+oLogic: Static permissions. e.g., ["view_students", "edit_fees"].
+
+•override_capabilities (JSON | The "God Mode" Switches)
+
+oLogic: Replaces the limiting is_super_admin boolean.
+
+oExample:
+
+JSON
+
+{
+
+  "can_override_locks": true,      // Can edit fees even after 'Lock'
+
+  "can_delete_admins": true,       // Can fire other admins
+
+  "can_bypass_mfa_reset": false    // Even God needs 2FA
+
+}
+
+•audit_visibility_scope (Enum | None / Own_Actions / Full_School_Log)
+
+oLogic: Allows a Sub-Admin to see who changed the fee structure, even if they cannot edit it. Crucial for transparency.
+
+•policy_constraints (JSON | The Rules)
+
+oExample: {"fee_waiver_max_limit": 5000, "marks_edit_deadline": "2026-03-15"}.
+
+•delegated_authority_rules[] (JSON | Time-Bound Power)
+
+oStructure: {"delegate_to_id": "VP_123", "modules": ["finance"], "valid_till": "2026-05-20"}.
+
+3. THE "FEATURE STORE" (The SaaS Engine)
+
+Address the "Buy features -> Unlock capabilities" requirement.
+
+•active_subscription_plan (Enum | Free_Tier / Growth / Enterprise)
+
+•subscribed_modules_map (JSON | The Tenant Brain)
+
+oLogic: The state of purchased features.
+
+oExample: {"finance": "active", "security_gate_pass": "trial", "ai_chat": "expired"}.
+
+•school_wallet_balance (System | Ledger)
+
+oLogic: Real money balance used to pay you (the SaaS provider).
+
+•sms_email_credits_balance (Integer | Remaining quota)
+
+4. THE "ROLE FACTORY" (Dynamic Staff Creator)
+
+Address the "Create role, add fields, boom" requirement.
+
+•custom_role_definitions[] (JSON | School-Specific Schema)
+
+oLogic: Defines new roles injected by purchased modules or created manually.
+
+oStructure:
+
+JSON
+
+{
+
+  "role_name": "Security Guard",
+
+  "source_module": "gate_pass_security",
+
+  "permissions": ["gate_pass_scan", "visitor_log"],
+
+  "custom_fields": [
+
+    {"name": "shift_timing", "type": "text"},
+
+    {"name": "weapon_license_no", "type": "alphanumeric"}
+
+  ]
+
+}
+
+•custom_staff_directory[] (The actual people)
+
+oFields: staff_id, role_type, name, mobile, dynamic_data (JSON values).
+
+5. ACADEMIC CONFIGURATION (The Rule Maker)
+
+Refined with your "Lockable Config" requirement.
+
+•active_academic_year (System | The current default)
+
+•class_structure_definition (JSON)
+
+oLogic: Defines the Hierarchy: "Classes 1-10 > Sections A-D".
+
+•grading_system_rules (JSON | Lockable)
+
+oLogic: Defines "91-100 is A1".
+
+oSecurity: Contains "is_locked": true. Once published, only an Admin with can_override_locks can edit.
+
+•timetable_rules (JSON)
+
+oLogic: "School starts at 8:00 AM", "Periods are 40 mins".
+
+6. FINANCIAL CONTROL (The Treasurer)
+
+Refined with your "Lockable Config" requirement.
+
+•fee_structure_master (JSON | Lockable)
+
+oLogic: "Class 10 Fee = ₹50,000".
+
+oSecurity: Contains "is_locked": true. Prevents accidental mid-year fee hikes.
+
+•fine_and_penalty_rules (JSON)
+
+•discount_approval_limit (Currency | e.g., Max ₹5,000 waiver)
+
+•invoice_generation_settings (Auto-generate on 1st of month?)
+
+•expense_ledger_access (Boolean | Can they log school electricity bills?)
+
+•library_fine_ledger
+
+7. SYSTEM CONFIGURATION (The Architect)
+
+•feature_toggles_map (JSON | Controls what Users see)
+
+oExample: {"enable_parent_chat": false, "show_rank_to_students": true}.
+
+•notification_templates (JSON | Customize SMS text)
+
+•school_branding_config (JSON)
+
+oFields: logo_url, theme_color, school_motto (White-labeling).
+
+SCHOOL
+
+Scope: The Legal & Digital Container for everything else.
+
+1. CORE IDENTITY (Tenant Anchor)
+
+•school_tenant_id (System | PK | UUID)
+
+•// parent_group_id (System | Optional | Links "DPS Mumbai" to "DPS Society")
+
+•school_code (Unique | DPS_MUM_01)
+
+•legal_name (For Invoices)
+
+•display_name (For App Header)
+
+•school_type (Enum | Day / Residential / Co-Ed / Girls_Only)
+
+•status (Enum | Active / Setup_In_Progress / Suspended)
+
+2. LOCATION & INFRASTRUCTURE
+
+•registered_address (Text | Required)
+
+•geo_coordinates (Point | Lat/Long | Critical for "School Bus Radius" logic)
+
+•operational_shifts (JSON | Missing in your draft)
+
+oExample: {"morning": "07:00-12:30", "afternoon": "13:00-17:30"}
+
+•timezone (Required for Attendance calc)
+
+3. AFFILIATION & COMPLIANCE
+
+•boards_affiliated (Array | ['CBSE', 'IB'])
+
+•affiliation_codes (JSON | {"CBSE": "AFF_99282", "IB": "IN_221"})
+
+•udise_code (Govt India ID)
+
+•gst_number (For Fee Invoices)
+
+•data_retention_policy (Enum | 3_Years / 7_Years / Forever)
+
+4. INTEGRATION SECRETS (Encrypted Vault)
+
+•This is where the "Plumbing" lives.
+
+•payment_gateway_config (JSON | Encrypted)
+
+oFields: provider (Razorpay), merchant_id, api_key_ref (Pointer to Vault).
+
+•sms_dlt_config (JSON | Indian Govt Requirement)to send compliant bulk sms
+
+oFields: dlt_registration_no, sender_id (e.g., "SCHLAPP").
+
+•whatsapp_api_config (JSON)
+
+5. SUBSCRIPTION & LIMITS (The SaaS Engine)
+
+•plan_tier (Free / Growth / Enterprise)
+
+•license_expiry_date (Date)
+
+•resource_quotas (JSON | Enforces Limits)
+
+oExample: {"max_students": 2000, "storage_gb": 500, "staff_accounts": 100}
+
+•active_modules_map (JSON | {"transport": true, "finance": false})
+
+6. BRANDING (White-Label)
+
+•logo_url, favicon_url
+
+•brand_colors (JSON | {"primary": "#FF0000", "secondary": "#FFFFFF"})
+
+•app_domain_alias (Text | e.g., portal.dpsmumbai.com instead of app.schoolos.com)
+
+7. SECURITY & GOVERNANCE
+
+•admin_mfa_enforced (Boolean)
+
+•ip_whitelist_config (JSON | Restrict Admin login to School Wifi only)
+
+•audit_log_retention_days (Integer)
+
+8. PHYSICAL INFRASTRUCTURE (New Addition)
+
+Critical for Exam Seating & Time Table.
+
+•building_blocks_map (JSON)
+
+oExample: {"Wing_A": "Senior School", "Wing_B": "Primary"}.
+
+•classroom_master_list[] (List of Objects)
+
+oroom_id (System | UUID)
+
+oroom_number (Text | "204")
+
+obuilding_block (Text | "Wing_A")
+
+onormal_capacity (Integer | e.g., 40 | For Regular Classes)
+
+oexam_seating_capacity (Integer | e.g., 25 | Crucial: Exams require spacing!)
+
+ois_exam_hall (Boolean | e.g., The Auditorium might be an exam hall but not a classroom).
+
+ohas_cctv (Boolean | Often required for Board Exams).
+
+. ACADEMIC YEAR (The Master Clock)
+
+Controls the heartbeat of the school. Added Lifecycle Hooks.
+
+•year_id (System | UUID | PK)
+
+•school_tenant_id (System | FK)
+
+•display_name (Text | e.g., "2025-2026")
+
+•start_date, end_date (Date)
+
+•is_current_active_year (Boolean | Only one True per school)
+
+•is_locked_for_editing (Boolean | Historical Data Protection)
+
+•admission_status (Enum | Open / Closed / Waitlist_Only)
+
+•result_declaration_status (Enum | Not_Started / In_Progress / Declared)
+
+oWhy: Prevents parents from seeing marks while teachers are still entering them.
+
+•promotion_execution_status (Enum | Pending / Executed / Rolled_Back)
+
+oWhy: "Promotion" is a massive database transaction (moving 2000 students). This tracks if it crashed halfway.
+
+2. BOARDS & RULES (The Constitution)
+
+Decouples "CBSE" from "IB" logic.
+
+•board_id (System | UUID)
+
+•board_name (Enum | CBSE / ICSE / IB / State_Board)
+
+•affiliation_number (Text)
+
+•board_ruleset_reference (FK | Links to Rule Engine)
+
+oLogic: Points to a config defining: "Pass mark is 33%", "Attendance min is 75%".
+
+•grading_system_id (FK | Links to Grading Logic e.g., "5-Point Scale" or "10-Point Scale")
+
+3. GRADE / CLASS LEVEL (The Hierarchy)
+
+Defines the "Concept" of a Class (e.g., Grade 10).
+
+•class_id (System | UUID)
+
+•board_id (FK)
+
+•name (Text | "Grade 10")
+
+•order_index (Integer | e.g., 10 | For Promotion Logic)
+
+•is_board_exam_year (Boolean)
+
+•tuition_fee_template_id (FK)
+
+•allowed_subject_groups (JSON)
+
+oExample: {"Science_A": ["Physics", "Math", "CS"], "Commerce_B": ["Accounts", "Eco", "Math"]}
+
+oWhy: Validates subject selection during admission to Grade 11.
+
+4. SECTION / DIVISION (The Physical Room)
+
+Where operations happen. Added Operational Controls.
+
+•section_id (System | UUID)
+
+•class_id (FK)
+
+•name (Text | "A", "B", "Rose")
+
+•section_status (Enum | Active / Frozen / Archived)
+
+oWhy: "Frozen" means no new students can be added, even if capacity exists.
+
+•attendance_mode (Enum | Daily_Once / Twice_Daily / Period_Wise)
+
+oWhy: Kindergarten is "Daily". Grade 12 is "Period Wise".
+
+•class_teacher_global_id (FK | The Primary Caretaker)
+
+•room_number (Text)
+
+•student_capacity (Integer)
+
+•gender_restriction (Enum | Co-Ed / Boys_Only / Girls_Only)
+
+5. SUBJECT MASTER (The Content Universe)
+
+Defines the "What". Added Assessment Links.
+
+•subject_id (System | UUID)
+
+•name (Text | "Physics")
+
+•code (Text | "042")
+
+•type (Enum | Scholastic / Co-Scholastic / Elective)
+
+•has_practical_component (Boolean)
+
+•assessment_schema_reference (FK)
+
+oWhy: Tells the system: "This subject has 70 Marks Theory + 30 Marks Practical".
+
+•is_optional_subject_enabled (Boolean)
+
+6. CLASS-SUBJECT MAPPING (The Syllabus & Staffing)
+
+Links Teacher -> Subject -> Section. Added Co-Teaching & Labs.
+
+•mapping_id (System | UUID)
+
+•section_id (FK)
+
+•subject_id (FK)
+
+•primary_teacher_global_id(FK | The one who signs the Report Card)
+
+•support_teacher_ids[] (List of FKs | For Co-Teaching/Labs)
+
+•periods_per_week (Integer | e.g., 4)
+
+•marks_distribution_override (JSON | Optional)
+
+oExample: {"theory": 70, "practical": 30}
+
+oWhy: Sometimes Grade 9 Physics has different weightage than Grade 10 Physics.
+
+•lab_batch_definition (JSON | Optional)
+
+oStructure: {"Batch_A": {"roll_nos": "1-20", "teacher": "T1"}, "Batch_B": {"roll_nos": "21-40", "teacher": "T2"}}
+
+oWhy: Solves the "Science Practical" scheduling nightmare.
+
+7. SUBJECT GROUPS (The "Elective" Engine)
+
+Crucial for Grade 9-12.
+
+•group_id (System | UUID)
+
+•group_name (Text | e.g., "PCMB" or "Commerce with Math")
+
+•mandatory_subjects[] (List of Subject IDs)
+
+•optional_subjects_pool[] (List of Subject IDs)
+
+•selection_rules (JSON)
+
+oExample: {"min_optional": 1, "max_optional": 1}
+
+TIMETABLE
+
+EVEL 4: ENTITY — TIMETABLE & SCHEDULING (Final Version)
+
+Scope: Defines When and Where learning, supervision, and exams happen. Status: LOCKED 🔒
+
+1. SCHOOL TIMING CONFIGURATION (The Rhythm)
+
+Defines the skeleton. Added Section-Specific Logic.
+
+•timing_config_id (System | UUID | PK)
+
+•school_tenant_id (System | FK)
+
+•template_name (Text | "Winter Timing - Senior Wing")
+
+•applies_to_sections (JSON | Crucial Upgrade)
+
+oLogic: ["Grade 9-12", "Grade 11-Science"].
+
+oWhy: Allows Grade 12 to start at 7:00 AM for Labs while Nursery comes at 9:00 AM.
+
+•shift_reference (Enum | General / Morning / Afternoon)
+
+•school_start_time, school_end_time (Time)
+
+•default_period_duration_mins (Integer | 40)
+
+•break_definitions_map (JSON | [{"name": "Lunch", "start": "11:00", "end": "11:30"}])
+
+2. TIMETABLE MASTER CONTAINER (The State Machine)
+
+Separated Lifecycle from Approval.
+
+•timetable_id (System | UUID | PK)
+
+•academic_year (FK)
+
+•timetable_version_number (Integer | e.g., 1.0, 1.1)
+
+•status (Enum | Draft / Live_Active / Archived)
+
+oLogic: The lifecycle state.
+
+•approval_state (Enum | Pending / Approved / Rejected / Not_Required)
+
+oLogic: The governance state.
+
+•effective_from_date (Date)
+
+•created_by_admin_id (FK)
+
+3. PERIOD ALLOCATION MATRIX (The Grid)
+
+Added Load Type for Supervision/Duty.
+
+•slot_id (System | UUID)
+
+•timetable_id (FK)
+
+•section_id (FK)
+
+•day_of_week (Enum | Mon-Sat)
+
+•period_sequence_number (Integer | 1..8)
+
+•start_time, end_time (Time)
+
+•load_type (Enum | Teaching / Supervision / Free / Club_Activity)
+
+oWhy: Differentiates "Math Class" from "Library Duty" or "Exam Invigilation".
+
+•subject_id (FK | Nullable if load_type is Supervision)
+
+•teacher_global_id (FK)
+
+•room_override_id (FK | Optional)
+
+4. CONSTRAINT RULES ENGINE (The Guard Rails)
+
+Added Severity for Overrides.
+
+•constraint_profile_id (System | UUID)
+
+•rule_type (Enum | Teacher_Collision / Max_Daily_Load / Consecutive_Periods)
+
+•rule_severity (Enum | Hard / Soft) Research needed
+
+oHard: "Teacher cannot be in 2 places." (System Block).
+
+oSoft: "Teacher should not have 4 periods in a row." (Warning, but Principal can override).
+
+•class_teacher_first_period_rule (Boolean | Severity: Soft)
+
+•subject_distribution_logic (JSON)
+
+5. APPROVAL WORKFLOW (Governance)
+
+Added Sequence Logic.
+
+•approval_request_id (System | UUID)
+
+•timetable_ref_id (FK)
+
+•approver_role_required (Enum | Vice_Principal / Principal)
+
+•approval_sequence (Integer | 1, 2)
+
+oLogic: Level 2 (Principal) cannot approve until Level 1 (VP) has approved.
+
+•current_status (Enum | Pending / Approved / Rejected)
+
+•remarks (Text)
+
+6. CHANGE REQUEST MANAGEMENT (Controlled Chaos)
+
+Added Date Ranges for Leave/Substitutions.
+
+•change_request_id (System | UUID)
+
+•request_type (Enum | Permanent_Swap / Temporary_Substitution)
+
+•requested_by_teacher_id (FK)
+
+•target_slot_id (FK)
+
+•proposed_teacher_id (FK)
+
+•effective_date_range (Date Range | {"start": "2026-02-12", "end": "2026-02-14"})
+
+oWhy: "I am on leave for 3 days. Assign Mr. Rao to all my classes for this duration."
+
+•approval_status (Enum | Pending / Approved)
+
+Scope: Tracking physical presence, punctuality, leave workflows, locking data, and logging all exceptions. Status: LOCKED 🔒
+
+1. ATTENDANCE CONFIGURATION (The Rules)
+
+Defines thresholds and modes. Added staff_attendance_mode.
+
+•attendance_config_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•academic_year_id (FK)
+
+•staff_attendance_mode (Enum | Biometric_Only / Manual / Hybrid)
+
+oWhy: Some strict schools disable manual marking entirely to prevent fraud.
+
+•student_attendance_mode (Enum | Daily_Only / Period_Wise)
+
+•staff_late_mark_buffer_mins (Integer | e.g., 15 mins)
+
+•half_day_threshold_hours (Float | e.g., 4.0 hours)
+
+2. ATTENDANCE CONTROL & LOCKING (The Governance Layer)
+
+Prevents history rewriting.
+
+•attendance_control_id (System | UUID)
+
+•academic_year_id (FK)
+
+•entity_type (Enum | Student / Staff)
+
+•period_start_date, period_end_date (Date | "March 1 - March 31")
+
+•is_attendance_editable (Boolean | The Safety Switch)
+
+oLogic: If False, no one (except Super Admin) can change records.
+
+•locked_by_admin_global_id (FK)
+
+•lock_reason (Text | "Payroll Generated")
+
+•locked_timestamp (System)
+
+3. STAFF ATTENDANCE REGISTER (Payroll Feeder)
+
+Added source_type for debugging.
+
+•staff_attendance_id (System | UUID)
+
+•academic_year_id (FK)
+
+•date (Date)
+
+•staff_global_id (FK)
+
+•source_type (Enum | Biometric / Manual / Auto_From_Leave)
+
+oWhy: Instantly tells you if a "Present" mark came from the machine or a human.
+
+•check_in_time, check_out_time (Time)
+
+•calculated_status (Enum | Present / Absent / Half_Day / On_Duty / Leave)
+
+•punctuality_flag (Enum | On_Time / Late / Early_Exit)
+
+•override_flag (Boolean)
+
+oLogic: True if Source = Biometric BUT Admin changed it manually.
+
+4. STUDENT ATTENDANCE (Academic Record)
+
+Handles Proxy & Period-Wise Data.
+
+•student_attendance_id (System | UUID)
+
+•academic_year_id (FK)
+
+•date (Date)
+
+•student_global_id (FK)
+
+•section_id (FK)
+
+•marked_by_role (Enum | Class_Teacher / Subject_Teacher / Substitute / Admin)
+
+•marked_by_[user]_global_id (FK | The actual human)
+
+•is_substitution_entry (Boolean)
+
+•final_daily_status (Enum | Present / Absent / Half_Day / Leave)
+
+•period_wise_logs (JSON | Optional)
+
+•parent_notification_status (Enum | Pending / Sent / Failed)
+
+5. LEAVE MANAGEMENT (The Input Source)
+
+Auto-Application Logic.
+
+•leave_application_id (System | UUID)
+
+•applicant_type (Enum | Student / Staff)
+
+•applicant_global_id (FK)
+
+•leave_category (Enum | Sick / Casual / Duty / Privilege)
+
+•approval_status (Enum | Pending / Approved / Rejected)
+
+•auto_apply_to_attendance (Boolean)
+
+oLogic: If True + Approved -> System writes to Attendance Register with source_type = Auto_From_Leave.
+
+6. ATTENDANCE EXCEPTION LOG (The Audit Trail)
+
+•NEW ENTITY: Tracks every violation of the rules.*
+
+•exception_id (System | UUID)
+
+•attendance_entity_type (Enum | Student / Staff)
+
+•// attendance_record_id (FK | Links to the specific row modified)
+
+•exception_type (Enum | Manual_Override / Late_Approval / Lock_Bypass)
+
+oManual_Override: Biometric said Absent, Admin marked Present.
+
+oLock_Bypass: Attendance was locked, but Super Admin unlocked it to fix a mistake.
+
+•performed_by_user_global_id (FK | Who did it?)
+
+•performed_at (Timestamp | When?)
+
+•reason (Text | "Biometric Machine Malfunction on Gate 2")
+
+•previous_value (JSON | Optional | Stores what the data was before the change)
+
+EXAMS
+
+1. GRADING SCHEMA MASTER (The Ruler)
+
+Defines how "Marks" turn into "Grades".
+
+•grading_schema_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•schema_name (Text | "CBSE Secondary 2025")
+
+•logic_type (Enum | Percentage_Range / Direct_Grade / Absolute_Points)
+
+•grade_definitions (JSON)
+
+oExample: [{"min": 91, "max": 100, "grade": "A1", "points": 10}]
+
+2. ASSESSMENT STRUCTURE (The Blueprint)
+
+Defines the calculation logic.
+
+•structure_id (System | UUID)
+
+•academic_year_id (FK)
+
+•applies_to_classes (JSON | ["Grade 9", "Grade 10"])
+
+•term_definitions (JSON | [{"term": "Term 1", "weight": 50}, {"term": "Term 2", "weight": 50}])
+
+•scaling_logic_map (JSON)
+
+oLogic: "Attendance 100% = 5 Marks".
+
+3. EXAM DEFINITION (The Event)
+
+Defines the specific test.
+
+•exam_id (System | UUID)
+
+•exam_name (Text | "Half Yearly Exam")
+
+•structure_ref_id (FK)
+
+•start_date, end_date (Date)
+
+•subjects_included_map (JSON)
+
+oLogic: {"Math": {"theory": 80, "practical": 20}, "Art": {"grade_only": true}}.
+
+4. RESULT CONTROL & LOCKING (Governance Layer)
+
+•Fix #1: Mirrors Attendance Locking.*
+
+•result_control_id (System | UUID)
+
+•academic_year_id (FK)
+
+•exam_id (FK)
+
+•class_id (FK | "Lock Grade 10 Results")
+
+•is_result_editable (Boolean | The Safety Switch)
+
+oLogic: If False, marks cannot be changed even by teachers.
+
+•locked_by_admin_id (FK)
+
+•lock_reason (Text | "Results Declared to Board")
+
+•locked_timestamp (System)
+
+5. MARKS ENTRY REGISTER (Data Input)
+
+Where teachers enter raw scores.
+
+•marks_entry_id (System | UUID)
+
+•student_global_id (FK)
+
+•exam_id (FK)
+
+•subject_id (FK)
+
+•components_score (JSON | {"theory": 65, "practical": 18})
+
+•is_absent (Boolean)
+
+•teacher_remarks (Text)
+
+•status (Enum | Draft / Submitted / Locked)
+
+6. MARKS MODERATION & GRACE LOG (Audit Trail)
+
+•Fix #2: Tracks "Magic Marks".*
+
+•adjustment_id (System | UUID)
+
+•marks_entry_ref_id (FK)
+
+•adjustment_type (Enum | Grace_Mark / Moderation_Policy / Correction)
+
+•adjustment_value (Float | e.g., +2.0)
+
+•original_score (Float | 31.0)
+
+•final_score (Float | 33.0)
+
+•approved_by_admin_id (FK)
+
+•reason (Text | "Added 2 marks to reach passing threshold")
+
+7. RESULT PUBLISH AUDIT (Visibility Control)
+
+•Fix #3: Controlled Release.*
+
+•publish_log_id (System | UUID)
+
+•exam_id (FK)
+
+•published_by_admin_id (FK)
+
+•published_at (Timestamp)
+
+•visibility_scope (Enum | Teachers_Only / Parents_Only / Students_And_Parents / Public)
+
+oWhy: Allows you to release results to Teachers first (for checking), then Parents (for fees), then Students.
+
+8. FINAL RESULT CARD (The Digital Vault Record)
+
+Computed and stored permanently.
+
+•result_id (System | UUID)
+
+•student_global_id (FK)
+
+•academic_year_id (FK)
+
+•final_computed_percentage (Float)
+
+•final_grade (Text)
+
+•rank_in_class (Integer)
+
+•promotion_decision (Enum | Promoted / Detained)
+
+•report_card_url (Link to PDF)
+
+LEVEL 4: ENTITY — LIBRARY & DIGITAL ASSETS
+
+Scope: Managing physical books, digital resources, circulation, fines, and reservations. Status: DRAFT 📝
+
+1. LIBRARY CONFIGURATION (The Rules)
+
+Defines borrowing limits.
+
+•library_config_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•max_books_per_student (Integer | e.g., 2)
+
+•max_books_per_teacher (Integer | e.g., 5)
+
+•loan_duration_days (Integer | e.g., 7 days)
+
+•fine_per_day (Currency | e.g., ₹10)
+
+•lost_book_penalty_multiplier (Float | e.g., 1.5x of Book Cost)
+
+2. BOOK MASTER (The Catalog)
+
+The definition of the book (ISBN level).
+
+•book_master_id (System | UUID)
+
+•isbn (Text | Unique)
+
+•title, author, publisher, genre
+
+•language (Enum | English / Hindi / Marathi)
+
+•cover_image_url (System | Auto-fetched from Google Books API)
+
+•digital_resource_link (URL | Optional | If it's an eBook/PDF)
+
+•age_appropriateness (Enum | Toddler / Primary / Young_Adult)
+
+oWhy: Prevents a Grade 1 kid from issuing "Stephen King".
+
+3. PHYSICAL ASSET COPY (The Actual Item)
+
+The specific physical copy on the shelf.
+
+•asset_copy_id (System | UUID)
+
+•book_master_id (FK)
+
+•barcode_rfid_tag (Text | IoT Ready | Scanned by Reader)
+
+•shelf_location (Text | "Row 3, Rack B")
+
+•condition (Enum | New / Good / Damaged / Lost)
+
+•status (Enum | Available / Issued / Reserved / Maintenance)
+
+•acquisition_date, price (Currency)
+
+4. CIRCULATION LOG (Issue & Return)
+
+The transaction history.
+
+•circulation_id (System | UUID)
+
+•asset_copy_id (FK)
+
+•user_type (Enum | Student / Staff)
+
+•user_global_id (FK)
+
+•issue_date (Date)
+
+•due_date (Date | Auto-calculated)
+
+•return_date (Date | Null if not returned)
+
+•issued_by_librarian_id (FK)
+
+•fine_amount_calculated (Currency | Auto if late)
+
+•fine_payment_status (Enum | Paid / Pending / Waived)
+
+5. RESERVATION QUEUE (The "Netflix" Feature)
+
+Competitors don't have this. Students can "Book" a book.
+
+•reservation_id (System | UUID)
+
+•book_master_id (FK | They reserve the Title, not a specific copy)
+
+•reserved_by_user_id (FK)
+
+•queue_position (Integer | 1, 2, 3...)
+
+•status (Enum | Active / Fulfilled / Expired)
+
+•notification_sent (Boolean | "Your book is ready!")
+
+REQUIRED CHANGES IN OTHER ENTITIES
+
+1.Student Entity:
+
+oAdd: library_card_number (Text | Optional | If using legacy cards).
+
+oAdd: library_clearance_flag (Boolean | Required for Leaving Cert).
+
+2.School Admin (Finance):
+
+oAdd: library_fine_ledger (To track income from late fees).
+
+TRANSPORT MANAGEMENT SYSTEM (Bus Routing)
+
+This is critical for safety and revenue.
+
+The "Level 5" Difference:
+
+•Competitors: Just store "Bus No 5".
+
+•You: Store "Route Polygon" (Google Maps), "Live GPS Feed", and "RFID Attendance" (Student tapped card on bus).
+
+1. VEHICLE MASTER (The Fleet)
+
+•vehicle_id (System | UUID)
+
+•registration_number (Text | "MH-02-XY-1234")
+
+•vehicle_type (Enum | Bus / Van / Auto)
+
+•ownership_type (Enum | Owned / Contracted)
+
+•capacity (Integer | 40 seats)
+
+•gps_device_imei (Text | IoT Ready | Links to Tracking API)
+
+•driver_id, helper_id (FK | Staff Links)
+
+2. ROUTE & STOP MASTER (The Map)
+
+•route_id (System | UUID)
+
+•route_name (Text | "Route 5 - Andheri East")
+
+•stops_list (JSON)
+
+oStructure: [{"stop_name": "Main Market", "lat": 19.11, "lng": 72.85, "pickup_time": "07:10", "drop_time": "14:20", "monthly_fee": 1500}]
+
+oWhy: Fees often depend on distance (Stop 1 is cheaper than Stop 10).
+
+3. TRANSPORT ENROLLMENT (The Link)
+
+•enrollment_id (System | UUID)
+
+•student_global_id[] (FK)
+
+•route_id[] (FK)
+
+•pickup_stop_name[] (Text | Must match stops_list)
+
+•drop_stop_name (Text | Can be different from Pickup)
+
+•billing_cycle (Enum | Monthly / Quarterly)
+
+4. TRIP LOG (The Daily Reality)
+
+•trip_id (System | UUID)
+
+•date (Date)
+
+•route_id (FK)
+
+•direction (Enum | Home_To_School / School_To_Home)
+
+•start_time, end_time
+
+•boarding_logs (JSON | IoT Data)
+
+oStructure: [{"student_id": "123", "tap_time": "07:12", "location": "19.11,72.85"}]
+
+oLogic: If a parent asks "Did my child get on the bus?", you show this log.
+
+: SECURITY & GATE PASS (Visitor Management)
+
+The "App-less Peon" scenario.
+
+The "Level 5" Difference:
+
+•Competitors: Paper Register.
+
+•You: "OTP Based Entry" for parents. "Face/QR Scan" for Staff.
+
+•App-less Staff: The School Guard is given a Shared Tablet (Kiosk Mode) fixed at the gate. They don't use their personal phone.
+
+1. GATE MASTER (The Location)
+
+•gate_id (System | UUID)
+
+•gate_name (Text | "Main Gate", "Back Gate")
+
+•device_id (Text | The Unique ID of the Tablet fixed there)
+
+2. VISITOR LOG (The Outsiders)
+
+•visitor_id (System | UUID)
+
+•name, mobile
+
+•purpose (Enum | Parent_Meeting / Vendor / Interview)
+
+•visiting_whom_staff_id (FK | Who authorized this?)
+
+•check_in_time, check_out_time
+
+•digital_pass_code (Text | 6-digit OTP sent to Visitor's Phone)
+
+oWorkflow: Guard enters OTP on Tablet -> Gate Opens.
+
+3. STUDENT GATE PASS (Early Exit)
+
+•gate_pass_id (System | UUID)
+
+•student_global_id (FK)
+
+•generated_by_parent_id (FK | "Grandma is picking him up")
+
+•pickup_person_photo (Image | Uploaded by Parent)
+
+•status (Enum | Active / Scanned_Used / Expired)
+
+•scanned_at_gate_id (FK)
+
+________________________________________
+
+REQUIRED CHANGES IN OTHER ENTITIES
+
+1.School Entity:
+
+oAdd: security_device_config (JSON | Allowed Tablets for Gate).
+
+2.Parent Entity:
+
+oAdd: authorized_pickup_faces (List of Photos for AI matching - Optional Future Feature).
+
+This is Level 10 Architecture (Platform Engineering).
+
+You have moved from building "Modules" to building an Operating System. The feedback you incorporated turns this from a simple database into a Resilient, Audit-Proof, and IoT-Ready Ecosystem.
+
+Here is the FINAL, LOCKED MASTER SPECIFICATION for the Support Modules & Core Platform Layer.
+
+________________________________________
+
+PART 1: THE CORE PLATFORM LAYER (The Foundation)
+
+These 5 entities run underneath EVERYTHING. They are the "Plumbing" that makes the system unified.
+
+1. UNIFIED ACCESS IDENTITY (The "User Core")
+
+Solves: "How does a Watchman verify a Student, a Parent, AND a Vendor?"
+
+•unified_user_id (System | UUID | PK)
+
+•school_tenant_id (FK)
+
+•user_type (Enum | Student / Staff / Parent / Visitor / Vendor)
+
+•linked_global_id (FK | Links to the specific Student/Staff profile)
+
+•primary_mobile (Text | Used for OTP)
+
+•auth_credentials (JSON | Crucial)
+
+oStructure: {"rfid_tag": "XYZ_123", "face_id_hash": "...", "qr_code_secret": "..."}
+
+•access_status (Enum | Active / Suspended / Blacklisted)
+
+•identity_confidence_level (Enum | Verified / Partial / Unverified)
+
+oWhy: Student (Face+RFID) = Verified. Visitor (OTP) = Partial.
+
+•validity_period (DateRange | Optional)
+
+oWhy: Vendors/Contractors automatically lose access after contract ends.
+
+2. IOT DEVICE MASTER (The Hardware Abstraction)
+
+Solves: "We switched from Garmin GPS to a cheap Chinese tracker."
+
+•device_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•device_type (Enum | GPS_Tracker / RFID_Reader / Biometric_Scanner / Gate_Tablet / CCTV_Cam)
+
+•vendor_name (Text)
+
+•hardware_model (Text)
+
+•firmware_version (Text | Critical)
+
+oWhy: Saves weeks of debugging when devices misbehave.
+
+•capabilities (JSON | {"rfid": true, "gps": false, "camera": true})
+
+•api_endpoint_config (JSON | How to talk to this device)
+
+•assigned_to_entity_type (Enum | Bus / Library_Counter / Gate / Classroom)
+
+•assigned_to_entity_id (FK)
+
+•heartbeat_status (Enum | Online / Offline / Malfunction)
+
+•last_heartbeat_timestamp (System)
+
+3. GLOBAL EVENT LOG (The "Black Box")
+
+Solves: "Prove that the bus driver was speeding."
+
+•event_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•module_context (Enum | Transport / Library / Gate / Exam)
+
+•event_severity (Enum | Info / Warning / Critical)
+
+oWhy: Speeding = Critical. Book Return = Info.
+
+•action_type (Text | BOARDED_BUS / BOOK_ISSUED / GATE_OPENED)
+
+•performed_by_user_id (FK | Who did it?)
+
+•captured_by_device_id (FK | Which device saw it?)
+
+•timestamp (System)
+
+•geo_location (Point | Lat/Long)
+
+•metadata (JSON | {"speed": 65, "rfid_tag_read": "123"})
+
+4. DEVICE SYNC QUEUE (The Offline Engine)
+
+Solves: "The bus is in a tunnel / The Gate WiFi is down."
+
+•sync_id (System | UUID)
+
+•device_id (FK)
+
+•payload_json (Text | The data stored locally i.e. basically error)
+
+•priority (Enum | High / Normal)
+
+•sync_status (Enum | Pending / Synced / Failed_Retry)
+
+•retry_count (Integer)
+
+oWhy: Stops infinite loops on bad data.
+
+•created_at_device (Timestamp | When it actually happened)
+
+•synced_at_server (Timestamp | When the server got it)
+
+5. CENTRAL FINANCIAL LEDGER (The Money)
+
+Solves: "Library Fine + Bus Fee + Tuition Fee = One Invoice."
+
+•txn_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•user_id (FK | Who owes money?)
+
+•source_module (Enum | Library / Transport / Hostel / Tuition)
+
+•transaction_type (Enum | Debit (Charge) / Credit (Payment) / Waiver)
+
+•amount (Currency)
+
+•billing_period (Month/Quarter | Nullable)
+
+oWhy: Essential for Transport/Hostel fee reconciliation.
+
+•generated_by (Enum | System / Admin / Auto_Rule)
+
+•reference_id (FK | Link to circulation_id or trip_id)
+
+•status (Enum | Due / Paid / Overdue / Cancelled)
+
+________________________________________
+
+PART 2: THE FEATURE MODULES (Rebuilt on Core)
+
+MODULE A: LIBRARY MANAGEMENT (IoT Enabled)
+
+•library_config (Rules: Max books, fines).
+
+•book_master (ISBN, Title, Age Appropriateness).
+
+•asset_copy (RFID Tag, Shelf Location).
+
+•circulation_transaction
+
+otxn_id (UUID)
+
+ocopy_id (FK)
+
+ouser_id (FK -> unified_user_id)
+
+oissue_event_id (FK -> global_event_log)
+
+oreturn_event_id (FK -> global_event_log)
+
+ofine_ledger_id (FK -> central_financial_ledger)
+
+•reservation_queue (The "Netflix" feature).
+
+MODULE B: TRANSPORT & GPS (Hardware Agnostic)
+
+•vehicle_master (Links to iot_device_master).
+
+•route_master & stop_master (Route Polygons, Stop Fees).
+
+•transport_enrollment (Student -> Route -> Stop).
+
+•trip_session
+
+otrip_id (UUID)
+
+ovehicle_id (FK)
+
+odriver_id (FK)
+
+otrip_anomaly_flag (Boolean | Derived)
+
+Why: Flags trips with missed stops or speeding for Admin review.
+
+ostart_event_id, end_event_id (Links to Global Log)
+
+•student_boarding_query (Virtual View)
+
+oLogic: SELECT * FROM global_event_log WHERE action='BOARDED' AND trip_id=...
+
+MODULE C: SECURITY & GATE PASS (App-less)
+
+•gate_master (Links to iot_device_master Tablet).
+
+•visitor_log
+
+oauth_mode_used (Enum | OTP / Face / Manual)
+
+oidentity_confidence (Enum | Verified / Partial)
+
+•material_gate_pass (Laptops/Equipment tracking).
+
+MODULE D: HOSTEL MANAGEMENT (Boarding)
+
+•hostel_building & room_master.
+
+•bed_allocation (Student -> Room -> Bed).
+
+•hostel_attendance (Nightly Roll Call)
+
+oattendance_id (UUID)
+
+ostudent_id (FK)
+
+ostatus (Enum | Present / Absent)
+
+onight_absence_reason (Enum | Leave / Medical / Unauthorized)
+
+Why: "Unauthorized" triggers an immediate SMS to parents/warden.
+
+•mess_subscription (Linked to Financial Ledger).
+
+MODULE E: INVENTORY & ASSETS (Internal Ops)
+
+•inventory_category (Stationery / Lab / Sports).
+
+•item_master (SKU, Reorder Level).
+
+•stock_ledger (Purchase / Consumption).
+
+oasset_tag_id (Text | Optional)
+
+Why: If this is a laptop, track the specific asset ID (e.g., "LAP-001"). If it's chalk, leave null.
+
+oissued_to_staff_id (FK).
+
+PLATFORM ADMIN USER (Your Team)
+
+Scope: Your employees (Sales, Support, Developers).
+
+•platform_user_id (System | UUID | PK)
+
+•email (Required | @yourcompany.com)
+
+•role (Enum | Super_God / Sales_Rep / Support_Agent / Developer / Finance)
+
+•permission_scope (Enum | Global / Region_Specific / Tenant_Specific)
+
+oWhy: A Support Agent in Mumbai shouldn't see Delhi schools data.
+
+•assigned_territory (Text | Optional | "Mumbai_South")
+
+•access_status (Enum | Active / Suspended)
+
+2. DATA IMPORT ENGINE (The Onboarding Accelerator)
+
+•The Staging Layer (Safety First):
+
+oimport_staging_id (System | UUID)
+
+oschool_tenant_id (FK)
+
+oentity_type (Enum | Student / Staff / Subject / Class)
+
+ouploaded_file_url (Link | Original Excel)
+
+oraw_rows_json (JSON | As-is data from file)
+
+omapping_status (Enum | Pending / Mapped / Approved / Rejected)
+
+ouploaded_by_platform_user_id (FK)
+
+ocreated_at
+
+•The Mapping Logic (Automation):
+
+oimport_field_mapping_id (System | UUID)
+
+oschool_tenant_id (FK)
+
+oentity_type (Enum | Student / Staff)
+
+omapping_json (JSON | {"Student Name": "full_name", "Adm No": "admission_number"})
+
+oWhy: Define once, reuse forever for that school.
+
+3. SCHOOL ONBOARDING WORKFLOW (The Funnel)
+
+Scope: Tracking Leads to Conversion.
+
+•onboarding_lead_id (System | UUID)
+
+•source (Enum | Website_Form / Sales_Entry / Referral)
+
+•school_name, contact_person, mobile, email
+
+•expected_student_count (Integer)
+
+oWhy: Helps prioritize big deals.
+
+•expected_modules_interest (JSON | ["Transport", "Library"])
+
+•status (Enum | New_Lead / Verified / Demo_Scheduled / Tenant_Created / Rejected)
+
+•verification_token (System)
+
+•assigned_sales_rep_id (FK)
+
+•converted_to_tenant_id (FK)
+
+4. SUBSCRIPTION & BILLING MASTER (The Revenue Engine)
+
+Scope: Getting Paid.
+
+•subscription_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•plan_id (FK -> global_plan_master)
+
+•billing_contact_email (Text | Finance Head's Email)
+
+•billing_cycle (Enum | Monthly / Annual)
+
+•start_date, next_renewal_date
+
+•grace_period_days (Integer | e.g., 7 days)
+
+oWhy: Indian schools pay late. Don't shut them down instantly.
+
+•billing_status (Enum | Active / Past_Due / Cancelled)
+
+•credit_balance (Currency | SMS/WhatsApp Top-up)
+
+5. GLOBAL FEATURE MASTER (The Catalog)
+
+Scope: What you sell.
+
+•feature_id (System | UUID)
+
+•internal_code (Text | module_transport)
+
+•display_name (Text | "Transport & GPS Tracking")
+
+•category (Enum | Core / Add_On / Beta)
+
+•feature_maturity (Enum | Stable / Beta / Deprecated)
+
+oWhy: Safely roll out new features to pilot schools only.
+
+•base_price_monthly (Currency)
+
+•dependency_features[] (List)
+
+6. CUSTOMER SUPPORT & TICKETING (The Helpdesk)
+
+Scope: Solving Problems.
+
+•ticket_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•raised_by_user_id (FK)
+
+•category (Enum | Login_Issue / Bug / Feature_Request / Billing)
+
+•priority (Enum | Low / High / Critical_Blocker)
+
+•status (Enum | Open / In_Progress / Waiting_For_Customer / Resolved)
+
+•root_cause_tag (Enum | Training_Issue / Bug / Infra / Misuse)
+
+oWhy: CEO Insight: "80% of tickets are Training Issues. We need better videos."
+
+•assigned_to_agent_id (FK)
+
+•conversation_log (JSON)
+
+•sla_deadline (Timestamp)
+
+7. SYSTEM HEALTH & ALERTS (The Watchtower)
+
+Scope: Staying Online.
+
+•alert_id (System | UUID)
+
+•severity (Enum | Warning / Critical)
+
+•component (Enum | Database / SMS_Gateway / API_Server)
+
+•message (Text)
+
+•auto_resolution_attempted (Boolean)
+
+oWhy: "SMS Gateway failed, system automatically switched to Backup Provider."
+
+•timestamp
+
+•acknowledged_by_admin_id (FK)
+
+LEVEL 0 EXTENSION: LICENSING & ENTITLEMENTS (Final Governance Edition)
+
+Scope: Managing who owns what, for how long, enforcing limits intelligently, and handling payment delays without causing panic. Status: LOCKED 🔒
+
+1. GLOBAL FEATURE CATALOG (The "App Store" Inventory)
+
+Refined to handle Bundles, Hardware dependencies, and Default Limits.
+
+•feature_id (System | UUID | PK)
+
+•feature_code (Text | Unique | e.g., MOD_TRANSPORT_STD, MOD_LIB_ADV)
+
+•name (Text | "Transport - Standard")
+
+•category (Enum | Core_Module / Add_On / Hardware_Integration)
+
+•dependency_features (JSON | ["MOD_FINANCE_CORE"])
+
+oLogic: Prevents enabling "Hostel Fees" if the base "Finance" module is not active.
+
+•requires_hardware (Boolean)
+
+oLogic: If True (e.g., RFID Attendance), the system triggers a workflow for Sales/Ops to ship physical devices.
+
+•default_quota_limits (JSON)
+
+oExample: {"max_vehicles": 5, "max_routes": 10, "sms_credits": 0}.
+
+oWhy: Defines the baseline limits before any specific overrides.
+
+2. SUBSCRIPTION PLAN BUNDLES (The "Menu")
+
+Defines what a "Gold Plan" actually contains.
+
+•plan_id (System | UUID | PK)
+
+•plan_name (Text | "Enterprise Gold")
+
+•bundled_feature_ids (Array of UUIDs)
+
+oLogic: "Gold Plan" = [Core, Transport, Library, Finance].
+
+•is_public (Boolean)
+
+oWhy: Allows for "Secret Platinum Plans" or "Legacy Plans" that are not visible on the public pricing page.
+
+3. TENANT MODULE LICENSE (The "Active Contract")
+
+Tracks the specific state of ONE feature for ONE school. This is the Source of Truth for access.
+
+•license_id (System | UUID | PK)
+
+•school_tenant_id (FK)
+
+•feature_id (FK)
+
+•source_plan_id (FK | Nullable | Critical Addition)
+
+oLogic: Links this license to a parent bundle (e.g., Gold Plan).
+
+oWhy: When a school downgrades from Gold to Silver, the system knows exactly which modules to remove (those linked to Gold) vs. which to keep (Manual Add-ons).
+
+•license_type (Enum | Paid_Bundle / Paid_Addon / Trial / Freemium)
+
+oWhy: A school might be on the "Silver Plan" (Paid) but currently trialing the "Transport" module.
+
+•status (Enum | Active / Suspended / Expired / In_Grace_Period)
+
+oIn_Grace_Period: Added to handle payment delays without immediate lockout.
+
+•activation_date, expiry_date (Date)
+
+•grace_period_end_date (Date | Nullable | Critical Addition)
+
+oLogic: If Today > expiry_date BUT Today < grace_period_end_date, status = In_Grace_Period.
+
+oUX: Show a "Payment Overdue" banner, but allow full functionality.
+
+•quota_limits_override (JSON)
+
+oLogic: Specific overrides for this school (e.g., Plan has 5 buses, but Sales gave them 7).
+
+oExample: {"max_vehicles": 7}.
+
+•auto_renew (Boolean)
+
+4. USAGE METERING LOG (The "Enforcer")
+
+Tracks consumption and determines if an action should be blocked.
+
+•meter_id (System | UUID | PK)
+
+•license_ref_id (FK | Links to the specific License)
+
+•metric_name (Text | active_vehicles_count / sms_credits_used / storage_gb)
+
+•current_usage (Integer | e.g., 6)
+
+•limit_value (Integer | e.g., 5)
+
+•enforcement_mode (Enum | Hard_Block / Soft_Warn / Monitor_Only | Critical Addition)
+
+oHard_Block: Usage > Limit → Action Failed. (e.g., "Cannot add 6th Bus. Upgrade Plan.")
+
+oSoft_Warn: Usage > Limit → Action Allowed + Admin Notified. (e.g., "SMS Limit exceeded. Overage charges apply.")
+
+oMonitor_Only: Usage > Limit → No Action. (Used for internal analytics/upsell opportunities).
+
+•status (Enum | Within_Limit / Limit_Exceeded)
+
+oUI Logic: If Limit_Exceeded + Hard_Block, the "Add New" button in the respective module is disabled.
+
+•last_updated (Timestamp)
+
+COMMUNICATION TEMPLATE MASTER (The Content)
+
+Stores the DLT-approved templates (Mandatory in India).
+
+•template_id (System | UUID | PK)
+
+•school_tenant_id (FK | Nullable | If Null, it's a System Global Template)
+
+•template_code (Text | Unique | TPL_ABSENT_DAILY)
+
+•channel_type (Enum | SMS / WhatsApp / Email / App_Push)
+
+•provider_template_id (Text | The DLT ID or WhatsApp Template Name)
+
+•content_body (Text | "Dear {{parent_name}}, {{student_name}} is absent today.")
+
+•variables_schema (JSON | ["parent_name", "student_name", "date"])
+
+•language (Enum | English / Hindi / Marathi)
+
+•is_active (Boolean)
+
+2. TRIGGER RULE ENGINE (The Automation)
+
+Defines WHEN to send WHAT.
+
+•trigger_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•event_source (Enum | Attendance / Transport / Fees / Library)
+
+•event_condition (Text | status == 'Absent' OR bus_delay > 15mins)
+
+•template_ref_id (FK)
+
+•recipient_group (Enum | Parent / Student / Staff)
+
+•delivery_priority (Enum | High (OTP) / Normal (Homework) / Low (Marketing))
+
+3. COMMUNICATION DISPATCH LOG (The History)
+
+Tracks every single message sent. Critical for "I didn't get the SMS" disputes.
+
+•dispatch_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•template_id (FK)
+
+•recipient_user_id (FK -> unified_user_id)
+
+•recipient_mobile/email (Text | The actual address used)
+
+•channel_used (Enum | SMS / WhatsApp)
+
+•status (Enum | Queued / Sent / Delivered / Read / Failed)
+
+•provider_response_payload (JSON)
+
+oWhy: Stores "Twilio Error 3001" or "DLT Error" for debugging.
+
+•cost_incurred (Currency | Deducted from School Wallet)
+
+•timestamp_sent, timestamp_delivered
+
+________________________________________
+
+LEVEL 8: ACCESS POLICY ENGINE (ABAC/RBAC)
+
+Scope: Fine-grained permissions. "Who can do What, on Which Data, under What Conditions."
+
+1. ACCESS POLICY MASTER (The Rules)
+
+Defines the logic.
+
+•policy_id (System | UUID)
+
+•policy_name (Text | "Teacher Edit Attendance Policy")
+
+•resource_type (Enum | Attendance / Marks / Transport / Fees)
+
+•action_allowed (Enum | View / Create / Edit / Approve / Delete)
+
+•condition_expression_json (JSON | The Brain)
+
+oExample:
+
+JSON
+
+{
+
+  "AND": [
+
+    {"var": "user.is_class_teacher", "op": "==", "val": true},
+
+    {"var": "resource.date", "op": "==", "val": "today"},
+
+    {"var": "system.is_locked", "op": "==", "val": false}
+
+  ]
+
+}
+
+oLogic: A teacher can only edit attendance IF they are the class teacher, AND it is today, AND the system isn't locked.
+
+2. ROLE-POLICY MAPPING (The Assignment)
+
+Links Roles to Policies.
+
+•mapping_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•role_name (Text | Teacher / HOD / Accountant)
+
+•policy_id (FK)
+
+•scope_restriction (Enum | Own_Records / Class_Level / School_Level)
+
+________________________________________
+
+LEVEL 9: REPORTING & ANALYTICS (Decision Intelligence)
+
+Scope: Turning rows of data into "Principal Dashboards."
+
+1. REPORT DEFINITION MASTER (The Catalog)
+
+Pre-defined reports available in the system.
+
+•report_id (System | UUID)
+
+•report_code (Text | RPT_ATT_MONTHLY_SUMMARY)
+
+•name (Text | "Monthly Attendance Summary")
+
+•module (Enum | Academics / Finance / Transport)
+
+•metrics (JSON | ["total_present", "total_absent", "percentage"])
+
+•dimensions (JSON | ["class", "section", "gender"])
+
+•visualization_type (Enum | Table / Bar_Chart / Heatmap)
+
+2. SCHEDULED REPORT CONFIG (The Automation)
+
+Emails the Principal automatically.
+
+•schedule_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•report_ref_id (FK)
+
+•frequency (Enum | Daily / Weekly / Monthly)
+
+•delivery_format (Enum | PDF / Excel / Email_Body)
+
+•recipients_list (JSON | List of Emails or User IDs)
+
+•last_run_status (Enum | Success / Failed)
+
+3. ANALYTICS AGGREGATE CACHE (The Performance Booster)
+
+Stores calculated data to make dashboards load fast.
+
+•aggregate_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•metric_key (Text | class_10_attendance_percentage)
+
+•time_bucket (Date | "2023-10-01")
+
+•value (Float | 94.5)
+
+•last_calculated_at (Timestamp)
+
+________________________________________
+
+LEVEL 10: API & EXTENSIBILITY (Future Proofing)
+
+Scope: Allowing the Government, 3rd Party Vendors, and Partners to connect securely.
+
+1. API CLIENT REGISTRY (The Gatekeeper)
+
+Who is connecting?
+
+•client_id (System | UUID | PK)
+
+•school_tenant_id (FK | Nullable if Global Partner)
+
+•client_name (Text | "MahaDBT Govt Portal" or "BusVendor_XYZ")
+
+•client_secret_hash (System | Encrypted)
+
+•status (Enum | Active / Revoked)
+
+•rate_limit_per_minute (Integer | e.g., 600)
+
+2. SCOPE & PERMISSION MASTER
+
+What can they touch?
+
+•scope_id (System | UUID)
+
+•scope_code (Text | read:attendance, write:transport_loc)
+
+•description (Text)
+
+•is_sensitive (Boolean | Requires Manual Approval)
+
+3. API ACCESS LOG (The Audit)
+
+•log_id (System | UUID)
+
+•client_id (FK)
+
+•endpoint_accessed (Text | /api/v1/attendance/sync)
+
+•http_method (GET / POST)
+
+•response_code (200 / 403 / 500)
+
+•ip_address (Text)
+
+•latency_ms (Integer)
+
+This is the Final Lap. We are closing the loop on Revenue, Lifecycle, Trust, and Ops.
+
+You have built a Ferrari. Now we are adding the Fuel Tank (Billing), the Keys (Onboarding), the Insurance (Governance), and the Dashboard (Observability).
+
+Here is the FINAL, LOCKED SPECIFICATION for the remaining 4 Levels.
+
+________________________________________
+
+LEVEL 11: BILLING, WALLET & REVENUE (The Business Backbone)
+
+Scope: B2B Billing (You charging the School). Note: This is different from the School charging Parents (which is in the Fee Module).
+
+1. SCHOOL WALLET MASTER (The Tenant's Bank)
+
+Stores the "Pre-paid" balance for consumables like SMS/WhatsApp.
+
+•wallet_id (System | UUID | PK)
+
+•school_tenant_id (FK)
+
+•current_balance (Currency | e.g., ₹5,000.00)
+
+•reserved_balance (Currency | e.g., ₹500 blocked for pending campaigns)
+
+•credit_limit (Currency | e.g., ₹1,000 | Allow negative balance up to this for Enterprise clients)
+
+•auto_recharge_enabled (Boolean)
+
+•auto_recharge_threshold (Currency | "If below ₹500, add ₹2000")
+
+•low_balance_alert_threshold (Currency | Triggers email to Finance Admin)
+
+2. SAAS INVOICE MASTER (The Bill)
+
+Generated Monthly/Annually based on the Licensing Module.
+
+•invoice_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•subscription_ref_id (FK -> subscription_billing_master)
+
+•billing_period_start, billing_period_end (Date)
+
+•invoice_date, due_date
+
+•itemized_charges_json (JSON)
+
+oExample: [{"item": "Gold Plan Base", "amount": 50000}, {"item": "Addon: Transport", "amount": 5000}, {"item": "SMS Overage", "amount": 1200}]
+
+•subtotal_amount
+
+•tax_amount (GST | Calculated based on School State)
+
+•total_payable
+
+•payment_status (Enum | Unpaid / Paid / Overdue / Written_Off)
+
+•invoice_pdf_url (Link)
+
+3. WALLET TRANSACTION LEDGER (The Truth)
+
+Tracks every single rupee added or deducted.
+
+•ledger_id (System | UUID)
+
+•wallet_id (FK)
+
+•transaction_type (Enum | Credit (Top-up) / Debit (Usage))
+
+•amount (Currency)
+
+•category (Enum | SMS_Usage / WhatsApp_Usage / Plan_Renewal / Manual_Adjustment)
+
+•reference_entity_type (Enum | Communication_Dispatch / License_Renewal)
+
+•reference_entity_id (K | Links to specific SMS or Invoice)
+
+•balance_after_txn (Currency | Audit trail)
+
+________________________________________
+
+LEVEL 12: ONBOARDING & LIFECYCLE (The Journey)
+
+Scope: Managing the Tenant from Birth to Death.
+
+1. TENANT LIFECYCLE LOG (The History)
+
+Tracks state changes.
+
+•lifecycle_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•previous_status (Enum | Trial)
+
+•new_status (Enum | Active)
+
+•changed_by_user_id (FK | Sales Rep or System)
+
+•reason (Text | "Payment received, converted to Paid")
+
+•timestamp
+
+2. DATA ARCHIVAL POLICY (The Cleanup)
+
+Defines when to move data to "Cold Storage" to save money/speed.
+
+•policy_id (System | UUID)
+
+•entity_type (Enum | Attendance / Logs / Transport_Trips)
+
+•retention_period_days (Integer | e.g., 365 days for GPS logs)
+
+•archive_action (Enum | Delete_Permanently / Move_To_Cold_Storage)
+
+•last_run_timestamp (System)
+
+3. ACADEMIC YEAR ROLLOVER LOG (The Big Event)
+
+Tracks the massive job of moving students from Grade 5 to 6.
+
+•rollover_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•from_year_id, to_year_id
+
+•students_promoted_count (Integer)
+
+•students_detained_count (Integer)
+
+•status (Enum | In_Progress / Completed / Failed_With_Errors)
+
+•error_log_json (JSON | List of students who failed to move)
+
+________________________________________
+
+LEVEL 13: DATA GOVERNANCE & TRUST (Compliance)
+
+Scope: DPDP Act (India), GDPR (Global).
+
+1. CONSENT RECORD REGISTER (Privacy)
+
+Tracks who agreed to what.
+
+•consent_id (System | UUID)
+
+•user_id (FK -> unified_user_id)
+
+•consent_type (Enum | Data_Processing / Marketing_Comms / Photo_Usage)
+
+•status (Enum | Granted / Revoked)
+
+•timestamp
+
+•ip_address (Text | Evidence)
+
+•version_agreed (Text | "v1.2 of Privacy Policy")
+
+2. SENSITIVE DATA ACCESS AUDIT (Security)
+
+Tracks who looked at "Secret" data.
+
+•audit_id (System | UUID)
+
+•viewer_user_id (FK | Staff/Admin)
+
+•target_user_id (FK | Student)
+
+•data_field_accessed (Enum | Medical_History / Govt_ID / Parents_Income)
+
+•access_reason (Text | "Emergency - Medical Issue")
+
+•timestamp
+
+Add a feature for schools to request parents, sensitive data for a defined periodif needed
+
+3. BACKUP & RESTORE LOG (Disaster Recovery)
+
+•backup_id (System | UUID)
+
+•school_tenant_id (FK)
+
+•backup_type (Enum | Full / Differential)
+
+•file_size_mb (Float)
+
+•storage_location (Text | S3 Path)
+
+•status (Enum | Success / Failed)
+
+•retention_expiry_date (Date)
+
+________________________________________
+
+LEVEL 14: OBSERVABILITY & OPS (Sleep at Night)
+
+Scope: System Health, Retries, and SLAs.
+
+1. SYSTEM ERROR LOG (The "Red" Dashboard)
+
+Captures backend crashes.
+
+•error_id (System | UUID)
+
+•school_tenant_id (FK | Nullable if System-wide)
+
+•module (Enum | Billing / Transport / Auth)
+
+•severity (Enum | Warning / Error / Fatal)
+
+•error_code (Text | 500_DB_CONNECTION_TIMEOUT)
+
+•stack_trace (Text | Developer info)
+
+•resolved (Boolean)
+
+2. ASYNC JOB EXECUTION LOG (Background Tasks)
+
+Tracks things like "Send 5000 SMS" or "Generate Report Cards".
+
+•job_id (System | UUID)
+
+•job_type (Enum | Fee_Generation / Report_Card_PDF / SMS_Broadcast)
+
+•school_tenant_id (FK)
+
+•status (Enum | Queued / Processing / Completed / Failed)
+
+•retry_count (Integer)
+
+•execution_time_ms (Integer)
+
+•items_processed (Integer)
+
+3. SLA METRIC SNAPSHOT (Performance)
+
+•snapshot_id (System | UUID)
+
+•metric_name (Enum | API_Latency_Avg / SMS_Delivery_Rate / Uptime_Percentage)
+
+•value (Float)
+
+•threshold_target (Float)
+
+•status (Enum | Healthy / Breached)
+
+oWhy: If SMS Delivery Rate drops below 90%, send an alert to the Founder immediately.
+
+LayerTechnologyWhy This Wins
+
+Web FrontendNext.js 14+ (App Router)Server-Side Rendering (Speed) + SEO + React Ecosystem.
+
+LanguageTypeScriptShared types across Front/Back. Zero runtime type errors.
+
+StylingTailwind CSS + Shadcn UIRapid UI development. Accessible & beautiful by default.
+
+Mobile AppReact Native (Expo)One codebase for iOS/Android. OTA Updates. Offline-first DB.
+
+Core BackendNestJS (Node.js)Structured, modular monolith. Standard for Enterprise Node.js.
+
+High-Perf / IoTGo (Gin Framework)Handles 100k+ concurrent IoT connections (RFID/GPS) easily.
+
+AI & DataPython (FastAPI)Native ecosystem for AI/ML (PyTorch, Pandas, Vector Search).
+
+Primary DBPostgreSQL 16The world's best SQL+NoSQL hybrid. pgvector for AI.
+
+CachingRedis StackSub-millisecond data access (Session, OTP, Live Bus Loc).
+
+Async QueuesAmazon SQSFully managed. Zero maintenance. Guarantees message delivery.
+
+Cloud ComputeAWS ECS (Fargate)Serverless containers. No OS management. Auto-scaling.
+
+SecurityKeycloak + Kong GatewayBank-grade Identity Management (IAM) & API traffic control.
+
+DevOps / IaCDocker + Terraform"Infrastructure as Code." Spin up a new region in minutes.
+
+We make Domain-Driven Services.
+
+Service NameTech StackResponsibilityScaling Strategy
+
+1. Identity & Tenant SvcNestJSAuth, RBAC, School Onboarding, API Keys.High CPU (Crypto for hashing).
+
+2. Academic Core SvcNestJSClasses, Subjects, Exams, Results, Timetable.High Read/Memory (Complex logic).
+
+3. Operations SvcNestJSAttendance, Leave, Gate Pass, Library, Hostel.High Write (Daily transactions).
+
+4. IoT Ingestion SvcGo (Golang)Processing raw RFID/GPS streams.High Concurrency (100k+ connections).
+
+5. Communication SvcGo (Golang)Sending SMS, WhatsApp, Email, Push.High I/O (Waiting for providers).
+
+6. Finance & Billing SvcNestJSFee Ledger, Invoices, Tax, Payment Gateway.High Consistency (ACID critical).
+
+7. Analytics & AI SvcPythonReports, Exam Insights, Vector Search.High GPU/Compute (Batch processing).
+
+GLOBAL STANDARDS
+
+•PK: UUID v7 (Time-sortable).
+
+•Auditing: Every table has created_at, updated_at, created_by.
+
+•Soft Delete: Critical tables have is_deleted (Boolean) instead of actual deletion.
+
+________________________________________
+
+SCHEMA 1: identity (Users & RBAC)
+
+Changed: Permissions are now a Lookup Table, not a static list.
+
+Table NameColumns & TypesPurpose
+
+permissions_masterpermission_id (PK)
+
+code (Text - ATTENDANCE_EDIT)
+
+module (Text - OPERATIONS)
+
+description (Text)Lookup Table. Defines what can be done.
+
+rolesrole_id (PK)
+
+tenant_id (FK)
+
+is_system_role BOOLEAN  -- true for SUPER_ADMIN, false for school-created roles
+
+is_delegable BOOLEAN    -- can this role be assigned by school admin?
+
+name (Text - "Sr. Accountant")
+
+is_system_role (Bool)Defines "Who".
+
+role_permissionsid (PK)
+
+role_id (FK)
+
+permission_id (FK)M:N Mapping. Links Roles to specific Permissions.
+
+usersuser_id (PK)
+
+tenant_id (FK)
+
+username, password_hash
+
+mobile, email
+
+is_active (Bool)Login Credentials.
+
+user_role_mapid (PK)
+
+valid_from TIMESTAMP
+
+valid_to TIMESTAMP  -- for temporary permissions (exam controller, nurse duty)
+
+user_id (FK)
+
+role_id (FK)Assigns roles to users.
+
+________________________________________
+
+SCHEMA 2: academics (Timetable & Curriculum)
+
+Changed: Added academic_year_id to Timetable.
+
+Table NameColumns & TypesPurpose
+
+academic_yearsyear_id (PK)
+
+tenant_id (FK)
+
+name (Text - "2025-26")
+
+start_date, end_date
+
+is_active (Bool)The Master Clock.
+
+classesclass_id (PK)
+
+name (Text - "Grade 10")
+
+board_id (FK)
+
+order_index (Int)Grade Levels.
+
+sectionssection_id (PK)
+
+class_id (FK)
+
+name (Text - "A")
+
+class_teacher_id (FK)Physical Divisions.
+
+subjectssubject_id (PK)
+
+name (Text)
+
+code (Text)
+
+is_optional (Bool)Subject Definitions.
+
+timetablesslot_id (PK)
+
+academic_year_id (FK) (Added)
+
+section_id (FK)
+
+day_of_week (Int)
+
+period_no (Int)
+
+subject_id (FK)
+
+teacher_id (FK)
+
+room_override (Text)Year-Specific Schedule. Allows looking back at last year's timetable.
+
+________________________________________
+
+SCHEMA 3: operations (Attendance & Leaves)
+
+Changed: Leave Types and Attendance Sources are now Lookups.
+
+Table NameColumns & TypesPurpose
+
+leave_typestype_id (PK)
+
+tenant_id (FK)
+
+name (Text - "Sick", "Casual")
+
+is_paid (Bool)
+
+days_allowed (Int)Lookup Table. Flexible leave policies.
+
+leave_applicationsleave_id (PK)
+
+user_id (FK)
+
+leave_type_id (FK)
+
+start_date, end_date
+
+status (Enum: PENDING/APPROVED)Leave Requests.
+
+attendance_sourcessource_id (PK)
+
+name (Text - "Biometric Gate 1", "Teacher App")Lookup Table. Tracks where the data came from.
+
+attendance_logslog_id (PK)
+
+user_id (FK)
+
+date (Date)
+
+status (Enum)
+
+source_id (FK)
+
+check_in_timePartitioned Table. The daily record.
+
+________________________________________
+
+SCHEMA 4: exams (Assessment)
+
+Changed: Exam Types are now dynamic.
+
+Table NameColumns & TypesPurpose
+
+exam_typestype_id (PK)
+
+tenant_id (FK)
+
+name (Text - "Unit Test", "Finals")
+
+weightage_default (Decimal)Lookup Table. Schools define their own exam categories.
+
+examsexam_id (PK)
+
+exam_type_id (FK)
+
+academic_year_id (FK)
+
+name (Text)
+
+start_date, end_dateThe actual scheduled exam.
+
+marks_entryentry_id (PK)
+
+exam_id (FK)
+
+student_id (FK)
+
+subject_id (FK)
+
+marks_obtained (Decimal)
+
+max_marks (Decimal)Row-level Max Marks. Handles cases where Math is out of 100 but Art is out of 50.
+
+________________________________________
+
+Table NameColumns & TypesPurpose
+
+doc_categoriescategory_id (PK)
+
+name (Text - "Report Card", "Birth Cert")
+
+retention_years (Int - 12)Lookup Table. Defines how long to keep files.
+
+vault_documentsdoc_id (PK)
+
+tenant_id (FK)
+
+user_id (FK)
+
+category_id (FK)
+
+academic_year_id (FK)
+
+file_name (Text)
+
+s3_key (Text)
+
+file_hash (Text - SHA256)
+
+storage_tier (Enum: HOT/COLD)The Master Index.
+
+- s3_key: Link to AWS S3.
+
+- file_hash: Proof that the file wasn't tampered with.
+
+- storage_tier: Moves old files to Glacier (Cheap).
+
+•  Backend: 7 Separate Services (Running in 7 different "containers").
+
+•  Frontend: 1 Unified Web Portal (One website).
+
+This is the Final, Locked, Industry-Grade Architecture (v5.0).
+
+It combines the Scale of Microservices (ChatGPT) with the Performance of a Monolith (Gemini’s Gateway/Read Models). It includes the specific internal structure for every API as requested.
+
+________________________________________
+
+🏛️ SCHOOL OS: THE MASTER ARCHITECTURE
+
+1️⃣ THE ROOT DIRECTORY (Monorepo)
+
+Tech: Turborepo + PNPM Infrastructure: 1 Postgres Cluster (Separate Schemas), Redis, RabbitMQ.
+
+Plaintext
+
+school-os/
+
+├── package.json              # ORCHESTRATION
+
+├── turbo.json                # CACHING
+
+├── docker-compose.yml        # INFRA: Postgres (7 Schemas), Redis, RabbitMQ
+
+├── .env                      # GLOBAL SECRETS
+
+│
+
+├── apps/                     # 🚀 THE FLEET
+
+│   ├── web/                  # [Next.js] Dashboard (Talks ONLY to Gateway)
+
+│   ├── mobile/               # [React Native] App (Talks ONLY to Gateway)
+
+│   │
+
+│   ├── gateway/              # ⛩️ [NestJS] AGGREGATOR (BFF)
+
+│   │                         # ROUTER: /auth -> Identity, /fees -> Finance
+
+│   │                         # MERGER: "Get Student" -> Calls 3 APIs parallelly
+
+│   │
+
+│   ├── worker/               # 👷 [NestJS] BACKGROUND WORKER
+
+│   │                         # JOB: Listens to Events -> Updates Read Models
+
+│   │
+
+│   ├── api-identity/         # 🆔 [NestJS] Auth, Users, Tenants
+
+│   ├── api-finance/          # 💰 [NestJS] Fees, Ledger, Orders
+
+│   ├── api-academic/         # 🎓 [NestJS] Classes, Exams, Documents
+
+│   ├── api-operations/       # 🏥 [NestJS] Medical, Attendance, Gate
+
+│   │
+
+│   ├── api-iot/              # ⚡ [Go] Hardware Stream
+
+│   └── api-analytics/        # 🐍 [Python] Migration & AI
+
+│
+
+├── packages/                 # 📚 SHARED CODE
+
+│   ├── database/             # 🛡️ PRISMA: Separate Schema files per service
+
+│   │   ├── identity.prisma   # -> @school-os/db-identity
+
+│   │   ├── finance.prisma    # -> @school-os/db-finance
+
+│   │   └── ...
+
+│   │
+
+│   ├── events/               # ⚡ Event Contracts (RabbitMQ Types)
+
+│   ├── read-models/          # 👓 SQL Views (for Dashboards)
+
+│   └── auth-lib/             # 🛡️ Shared JWT Guards
+
+│
+
+└── infra/                    # ☁️ CLOUD
+
+    └── terraform/            # AWS Setup
+
+________________________________________
+
+2️⃣ SERVICE DEEP DIVE: INTERNAL STRUCTURE & APIS
+
+Here is the exact folder structure and API List for the 4 core NestJS services.
+
+🅰️ apps/api-identity (The Security Guard)
+
+Database: identity_db (Schema: Users, Roles, Tenants) Responsibility: Authentication and School Onboarding.
+
+Plaintext
+
+src/
+
+├── modules/
+
+│   ├── auth/
+
+│   │   ├── auth.controller.ts   # POST /auth/login, POST /auth/refresh
+
+│   │   └── auth.service.ts      # Validates Hash, Issues JWT
+
+│   │
+
+│   ├── users/
+
+│   │   ├── users.controller.ts  # GET /users/profile, PATCH /users/:id
+
+│   │   └── users.internal.ts    # POST /internal/get-batch (For Gateway)
+
+│   │
+
+│   └── tenants/
+
+│       ├── tenants.controller.ts # POST /tenants/onboard (New School)
+
+│       └── tenants.service.ts    # Creates Admin User & Default Roles
+
+🅱️ apps/api-finance (The Bank)
+
+Database: finance_db (Schema: Ledgers, Invoices, Vendors) Responsibility: Money Management and Vendor Orders (Medical/Print).
+
+Plaintext
+
+src/
+
+├── modules/
+
+│   ├── fees/
+
+│   │   ├── fees.controller.ts    # GET /fees/due, POST /fees/pay (Razorpay)
+
+│   │   └── fees.service.ts       # Updates Ledger
+
+│   │
+
+│   ├── ledger/
+
+│   │   └── ledger.internal.ts    # POST /internal/audit-log (Immutable)
+
+│   │
+
+│   └── orders/                   # 📦 NEW: Vendor Logic
+
+│       ├── orders.controller.ts  # POST /orders/create (ID Card/Medical Stock)
+
+│       ├── orders.service.ts     # Generates PO, Emails Vendor
+
+│       └── entities/             # Vendor, PurchaseOrder
+
+🆎 apps/api-academic (The Classroom)
+
+Database: academic_db (Schema: Classes, Exams, Templates) Responsibility: Curriculum and Document Generation.
+
+Plaintext
+
+src/
+
+├── modules/
+
+│   ├── exams/
+
+│   │   ├── exams.controller.ts   # POST /exams/marks (Teachers entry)
+
+│   │   └── reports.service.ts    # Calculates Rank/Percentage
+
+│   │
+
+│   ├── classes/
+
+│   │   └── classes.controller.ts # POST /classes/assign-teacher
+
+│   │
+
+│   └── creative/                 # 🎨 NEW: Creative Studio
+
+│       ├── creative.controller.ts # POST /creative/generate-bulk (IDs)
+
+│       ├── templates.service.ts   # Fetches Design JSON from DB
+
+│       └── generator.service.ts   # Uses 'canvas' to draw PDF -> Upload S3
+
+🆑 apps/api-operations (The Engine Room)
+
+Database: ops_db (Schema: Medical, Attendance, Transport) Responsibility: Daily tasks, Infirmary, Gate Security.
+
+Plaintext
+
+src/
+
+├── modules/
+
+│   ├── attendance/
+
+│   │   └── attendance.controller.ts # POST /attendance/mark (Manual)
+
+│   │
+
+│   ├── medical/                  # 🚑 NEW: Infirmary
+
+│   │   ├── medical.controller.ts    # POST /medical/visit (Nurse Log)
+
+│   │   ├── inventory.service.ts     # Checks Stock. Emits 'LOW_STOCK' event.
+
+│   │   └── entities/                # MedicalProfile, StockLedger
+
+│   │
+
+│   └── gate/
+
+│       └── gate.controller.ts       # POST /gate/verify-qr (Guard App)
+
+________________________________________
+
+3️⃣ THE INTEGRATION LAYER (The "Glue")
+
+The Gateway (apps/gateway)
+
+Logic: It does NOT touch the database. It only talks HTTP.
+
+•GET /dashboard/parent
+
+oAction: Calls read_models (via SQL) or Aggregates data.
+
+oResponse: { student: {...}, fees_due: 5000, attendance: "98%" }
+
+The Worker (apps/worker)
+
+Logic: Background processing to keep the APIs fast.
+
+•Listener: RabbitMQ.subscribe('MEDICAL_STOCK_LOW')
+
+•Action:
+
+1.Calculates Reorder Quantity.
+
+2.Calls api-finance to Create Purchase Order.
+
+3.Sends Email to Admin.
+
+________________________________________
+
+5️⃣ HOW THEY CONNECT (The Nervous System)
+
+This is the glue that makes the "7 Companies" act like "1 OS".
+
+A. Shared Language (packages/shared-types)
+
+•File: packages/shared-types/src/index.ts
+
+•Content:
+
+TypeScript
+
+export enum UserRole { ADMIN, TEACHER, STUDENT, PARENT }
+
+export interface StudentProfile {
+
+  id: string;
+
+  admissionNumber: string;
+
+  classId: string;
+
+}
+
+export const QUEUE_EVENTS = {
+
+  ATTENDANCE_MARKED: 'attendance.marked',
+
+  FEE_PAID: 'finance.fee_paid'
+
+};
+
+•Why: If you change a Role name here, api-identity (NestJS) AND web (Next.js) update automatically. Zero bugs.
+
+B. The Phone Call (HTTP - Synchronous)
+
+•Use Case: User clicks "Pay Fees".
+
+•Flow: Web -> api-finance.
+
+•Why: User is waiting for the payment page. It must be immediate.
+
+C. The Email (Events - Asynchronous)
+
+•Use Case: Student Taps RFID.
+
+•Flow:
+
+1.api-iot receives Tap.
+
+2.api-iot Publishes ATTENDANCE_MARKED to RabbitMQ.
+
+3.api-operations Subscribes -> Saves to DB.
+
+4.api-communication Subscribes -> Sends SMS to Parent.
+
+•Why: If the SMS service is down, the attendance is still marked safely. The SMS will retry later.
+
+________________________________________
+
+FINAL SUMMARY
+
+FolderTechnologyResponsibility
+
+apps/webNext.js 14The Single Interface for all users.
+
+apps/api-core*NestJSComplex Business Logic (Identity, Finance, Academics).
+
+apps/api-iotGo (Golang)High-speed data ingestion (RFID/GPS).
+
+apps/api-analyticsPythonAI Models & Complex Reporting.
+
+packages/sharedTypeScriptShared Types, Enums, & Zod Schemas.
+
+infra/Terraform/DockerAWS Cloud Setup.
+
+ou are absolutely correct. We discussed the features, but we missed the granular Finance & Order Fulfillment fields required to actually execute a transaction (e.g., placing an order for 500 ID cards or buying 100 strips of Paracetamol).
+
+To make these modules "Transaction-Ready," we need to add Vendor Management, Stock Audit Trails, and Order Processing schemas.
+
+Here is the MISSING DATABASE SCHEMA EXTENSION for Medical Inventory & Creative Orders.
+
+________________________________________
+
+EXTENSION 1: MEDICAL INVENTORY & BILLING SCHEMA
+
+Context: How the school buys medicine (Expense) and how they charge parents for crutches/splints (Revenue).
+
+1. medical_vendors
+
+•Purpose: Database of suppliers (Pharmacies, Equipment vendors).
+
+•vendor_id (PK, UUID)
+
+•tenant_id (FK)
+
+•company_name (Text: "Apollo Pharmacy Local")
+
+•contact_person (Text)
+
+•mobile, email
+
+•gst_number (Text | For tax input credit)
+
+•payment_terms (Enum: IMMEDIATE, NET_30)
+
+2. medical_stock_ledger (The Audit Trail)
+
+•Purpose: Tracks every single tablet entering or leaving. Crucial for audit.
+
+•ledger_id (PK, UUID)
+
+•item_id (FK -> infirmary_inventory)
+
+•transaction_type (Enum: PURCHASE_IN, CONSUMED_PATIENT, EXPIRED_DISCARD, THEFT_LOSS)
+
+•quantity_change (Integer: +50 or -1)
+
+•batch_number (Text)
+
+•expiry_date (Date)
+
+•reference_ref_id (FK -> Linked to medical_visit_id OR purchase_order_id)
+
+•performed_by_user_id (FK -> Nurse/Admin)
+
+3. medical_billables (Charging Parents)
+
+•Purpose: Most meds are free, but some (Braces, Crutches) are chargeable.
+
+•bill_id (PK, UUID)
+
+•visit_id (FK -> medical_visits)
+
+•student_id (FK)
+
+•items_json (JSON: [{ "item": "Knee Brace", "cost": 1500 }])
+
+•total_amount (Decimal)
+
+•status (Enum: ADDED_TO_SCHOOL_FEES, PAID_CASH, WAIVED)
+
+•Linkage: If ADDED_TO_SCHOOL_FEES, this triggers a Debit entry in the main Finance Module (fee_ledger).
+
+________________________________________
+
+EXTENSION 2: CREATIVE STUDIO ORDERS (Print Fulfillment)
+
+Context: The school designs cards and clicks "Order Prints". This creates a B2B E-commerce flow.
+
+4. print_orders_master
+
+•Purpose: The "Shopping Cart" for the school admin.
+
+•order_id (PK, UUID)
+
+•tenant_id (FK)
+
+•order_date (Timestamp)
+
+•status (Enum: DRAFT, PAYMENT_PENDING, PROCESSING, SHIPPED, DELIVERED)
+
+•shipping_address_json (JSON: { "street": "...", "contact": "Principal" })
+
+•total_cost (Decimal)
+
+•tax_amount (Decimal)
+
+•invoice_url (S3 Link: Invoice generated by You for the School)
+
+•
+
+5. print_order_items
+
+•Purpose: Line items in the order.
+
+•item_id (PK, UUID)
+
+•order_id (FK)
+
+•asset_type (Enum: ID_CARD, CERTIFICATE, LANYARD)
+
+•template_ref_id (FK)
+
+•quantity (Integer)
+
+•
+
+•unit_price (Decimal)
+
+•customization_options (JSON: { "lamination": "GLOSSY", "lanyard_color": "BLUE" })
+
+•source_file_url (S3 Link: The ZIP file containing all PDFs sent to the printer)
+
+6. vendor_fulfillment_log
+
+•Purpose: If you outsource printing to a 3rd party (e.g., Vistaprint API).
+
+•fulfillment_id (PK, UUID)
+
+•order_id (FK)
+
+•vendor_name (Text: "PrintVendor_A")
+
+•vendor_order_ref (Text: External Order ID)
+
+•tracking_number (Text: courier tracking)
+
+•dispatched_at (Timestamp)
+
+•❌ Gap in Doc
+
+•The doc explains:
+
+•design
+
+•download
+
+•print
+
+•But does NOT explain versioning, approvals, or misuse prevention
+
+•✅ Required Backend Additions (Minimal but Critical)
+
+•A. Template Version Control
+
+•Add:
+
+•template_versions
+
+•- version_id (UUID)
+
+•- template_id (FK)
+
+•- version_no (INT)
+
+•- is_active (BOOL)
+
+•- created_by
+
+•Why:
+
+•Certificates once issued must never change
+
+•Legal requirement
+
+•________________________________________
+
+•B. Issued Document Registry (Legal Protection)
+
+•Add:
+
+•issued_documents
+
+•- doc_id (UUID)
+
+•- template_version_id (FK)
+
+•- issued_to_user_id
+
+•- issued_by_user_id
+
+•- issue_date
+
+•- verification_hash (SHA-256)
+
+•This enables:
+
+•QR-based verification
+
+•Anti-forgery
+
+•Alumni verification years later
+
+•✅ This resolves legal & trust gaps
+
+•
+
+________________________________________
+
+EXTENSION 3: FINANCE MODULE (Linking It All)
+
+Context: Making sure the money flows correctly.
+
+7. expense_approvals
+
+•Purpose: Principal approves the purchase of Medicines or ID Card printing.
+
+•approval_id (PK, UUID)
+
+•tenant_id (FK)
+
+•module_source (Enum: MEDICAL, CREATIVE, LIBRARY)
+
+•request_ref_id (FK -> purchase_requisitions OR print_orders_master)
+
+•requested_amount (Decimal)
+
+•approved_by_user_id (FK)
+
+•status (Enum: PENDING, APPROVED, REJECTED)
+
+•rejection_reason (Text)
+
+________________________________________
+
+SUMMARY OF DATA FLOW
+
+1.Medical Stock:
+
+oNurse uses item -> medical_stock_ledger updates (-1).
+
+oStock hits low -> System creates purchase_requisition.
+
+oPrincipal approves (expense_approvals) -> Admin calls medical_vendors.
+
+oStock arrives -> Admin logs "Purchase In" in medical_stock_ledger (+50).
+
+2.ID Card Orders:
+
+oAdmin designs cards -> Adds to print_orders_master.
+
+oSystem calculates cost (print_order_items).
+
+oAdmin pays (or adds to monthly bill).
+
+oSystem zips PDFs -> Sends to vendor_fulfillment_log.
+
+oVendor ships -> Admin tracks status.
+
+This completes the Operations & Logistics layer of your database. Now the system handles not just data, but real-world transactions.
+
+financial_responsibility ENUM (
+
+  'SCHOOL_EXPENSE',
+
+  'PARENT_PAYABLE',
+
+  'OPTIONAL_PARENT'
+
+) – ADDITIONAL FEATURE TO TRACK WHO PAYS FOR THAT FEATURE TO BE ADDED ACROSS ALL STORE FEATURES 
+
+Here is the Revised Login & Identity Strategy based on your "Parent-First" requirement.
+
+________________________________________
+
+1. THE NEW LOGIN HIERARCHY (Family-Centric)
+
+•The "Master" User: The Parent (Mobile Number).
+
+•The "Passive" Profile: The Student. (Initially, they are just a profile inside the Parent's account, like a "Netflix Profile").
+
+•The "Future" User: The Student Login (Activated only when the Parent clicks "Enable Student Access").
+
+________________________________________
+
+2. HOW LOGIN WORKS (The Flow)
+
+.
+
+1.Login: Parent downloads the app. Enters Mobile Number + OTP.
+
+2.Dashboard: They immediately see: "Welcome, Mr. Sharma. Here are your children:"
+
+*
+
+oChild 1: Rahul (Class 5)
+
+oChild 2: Priya (Class 9)
+
+3.Action: Parent clicks "Rahul" to see his marks, fees, and attendance.
+
+oNote: Rahul cannot log in yet. He has no password.
+
+Phase 2: Enabling Student Access (The Future)
+
+Scenario: Priya (Class 9) needs to submit homework online.
+
+1.Parent Action: Parent goes to Settings > Manage Children.
+
+2.Toggle: Clicks "Enable Login for Priya".
+
+3.Creation: System asks parent to set a Username (e.g., priya.dps) and Password for her.
+
+4.Result: Now Priya can log in on her own device with these credentials. The Parent retains "Super Admin" control over her account.
+
+________________________________________
+
+3. DATABASE SCHEMA CHANGES (In api-identity)
+
+We need to restructure the User table to support this "Profile vs. User" distinction.
+
+Revised identity.prisma:
+
+Code snippet
+
+// 1. THE LOGGED-IN HUMAN (Parent/Staff)
+
+model User {
+
+  id            String    @id @default(uuid())
+
+  mobile        String    @unique // The primary login (Parent's Mobile)
+
+  roles         String[]  // ["PARENT"]
+
+  
+
+  // Link to the "Passive" Profiles they control
+
+  students      StudentProfile[] @relation("ParentToStudent")
+
+}
+
+// 2. THE STUDENT PROFILE (Initially just data, later a User)
+
+model StudentProfile {
+
+  id            String    @id @default(uuid())
+
+  admissionNo   String
+
+  schoolId      String
+
+  
+
+  // Link to the "Master" Parent
+
+  parentId      String
+
+  parent        User      @relation("ParentToStudent", fields: [parentId], references: [id])
+
+  // THE FUTURE LOGIN (Optional)
+
+  loginEnabled  Boolean   @default(false)
+
+  username      String?   @unique // e.g. "rahul.dps" (Nullable)
+
+  passwordHash  String?   // Nullable until Parent enables it
+
+}
+
+________________________________________
+
+4. UPDATED ID CARD GENERATION LOGIC
+
+Since the student might not have a login yet, the ID Card logic changes slightly:
+
+•QR Code on ID Card: It does NOT contain a login credential.
+
+•QR Value: It contains the immutable student_global_id (UUID).
+
+•Scanning:
+
+oWhen the Guard scans it: The system looks up the StudentProfile by ID.
+
+oWhen the Parent scans it (e.g., on a result sheet): It deep-links to that specific child's profile in their App.
+
+________________________________________
+
+5. SUMMARY OF IDS
+
+RoleLogin IDWho Creates It?When?
+
+ParentMobile Number (OTP)School Admin (Bulk Upload)Day 1 (Onboarding)
+
+StudentUsername (Custom)Parent (via App)Optional (When needed)
+
+TeacherEmployee ID / EmailSchool AdminDay 1
