@@ -16,6 +16,11 @@ class Teacher(models.Model):
         ('VERIFIED', 'Verified'),
     ]
     
+    TEACHER_TYPE_CHOICES = [
+        ('TEACHING', 'Teaching'),
+        ('NON_TEACHING', 'Non-Teaching'),
+    ]
+    
     GENDER_CHOICES = [
         ('M', 'Male'),
         ('F', 'Female'),
@@ -29,7 +34,7 @@ class Teacher(models.Model):
     
     # Personal Info
     photo = models.ImageField(upload_to='teacher_photos/', null=True, blank=True)
-    title = models.CharField(max_length=10, choices=[('Mr', 'Mr'), ('Miss', 'Miss'), ('Mrs', 'Mrs'), ('Dr', 'Dr')], null=True, blank=True)
+    title = models.CharField(max_length=10, choices=[('Mr', 'Mr'), ('Mr.', 'Mr.'), ('Miss', 'Miss'), ('Mrs', 'Mrs'), ('Mrs.', 'Mrs.'), ('Dr', 'Dr'), ('Dr.', 'Dr.')], null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES, default='O')
     marital_status = models.CharField(max_length=20, null=True, blank=True)
@@ -38,6 +43,7 @@ class Teacher(models.Model):
     
     # Contact Info
     emergency_contact_phone = models.CharField(max_length=20, null=True, blank=True)
+    address = models.TextField(null=True, blank=True)
     
     # Government Identifiers
     aadhaar_last_4_digits = models.CharField(max_length=4, null=True, blank=True)
@@ -55,10 +61,30 @@ class Teacher(models.Model):
     # Dynamic Attributes
     custom_attributes = models.JSONField(default=dict, blank=True)
     
+    # Employment Info
+    salary = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    date_of_joining = models.DateField(null=True, blank=True)
+    
     # Verification
     verification_status = models.CharField(max_length=20, choices=VERIFICATION_STATUS, default='UNVERIFIED')
     
+    teacher_type = models.CharField(
+        max_length=20, 
+        choices=TEACHER_TYPE_CHOICES, 
+        default='TEACHING'
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def full_name(self):
+        if self.user:
+            return self.user.full_name
+        return f"Teacher #{self.tuid}"
+
+    @property
+    def full_name_display(self):
+        return self.full_name
 
     def save(self, *args, **kwargs):
         if not self.tuid:
@@ -67,7 +93,7 @@ class Teacher(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.user.full_name} ({self.tuid})"
+        return f"{self.full_name} ({self.tuid})"
     
 class TeacherSchoolAssociation(models.Model):
     """
@@ -113,6 +139,17 @@ class TeacherAssignment(models.Model):
         ('SUBSTITUTE', 'Substitute / Proxy'),
         ('EXAM_INVIGILATOR', 'Exam Invigilator'),
         ('SPORTS_TEACHER', 'Sports / Activity Teacher'),
+        ('NON_TEACHING_STAFF', 'Non-Teaching Staff'),
+        ('ACCOUNTANT', 'Accountant'),
+        ('LIBRARIAN', 'Librarian'),
+        ('LAB_ASSISTANT', 'Lab Assistant'),
+        ('TRANSPORT_MANAGER', 'Transport Manager'),
+        ('NURSE', 'Nurse / Medical Officer'),
+        ('SECURITY_SUPERVISOR', 'Security Supervisor'),
+        ('IT_SUPPORT', 'IT Support Specialist'),
+        ('FACILITIES_MANAGER', 'Facilities Manager'),
+        ('OFFICE_STAFF', 'Office Staff'),
+        ('COUNSELOR', 'Counselor'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -120,10 +157,11 @@ class TeacherAssignment(models.Model):
     teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='assignments')
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='teacher_assignments')
     
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    role = models.CharField(max_length=100, choices=ROLE_CHOICES)
     grade = models.CharField(max_length=10, help_text="Target Grade", blank=True)
     section = models.CharField(max_length=5, help_text="Target Section", blank=True)
     subject = models.CharField(max_length=100, blank=True, null=True, help_text="e.g. Mathematics")
+    department = models.CharField(max_length=100, blank=True, null=True, help_text="Department name for non-teaching staff")
     
     academic_year = models.CharField(max_length=9, help_text="2025-2026")
     is_active = models.BooleanField(default=True)
@@ -133,6 +171,47 @@ class TeacherAssignment(models.Model):
     class Meta:
         ordering = ['school', 'academic_year', 'grade']
         verbose_name = "Teacher Assignment"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.role == 'CLASS_TEACHER' and self.is_active:
+            if hasattr(self, 'school') and self.school:
+                # 1. Check for another class teacher assigned to this grade and section
+                queryset = TeacherAssignment.objects.filter(
+                    school=self.school,
+                    academic_year=self.academic_year,
+                    grade__iexact=self.grade,
+                    section__iexact=self.section,
+                    role='CLASS_TEACHER',
+                    is_active=True
+                )
+                if self.pk:
+                    queryset = queryset.exclude(pk=self.pk)
+                if queryset.exists():
+                    teacher_names = ", ".join([f"{ta.teacher.user.full_name}" for ta in queryset])
+                    raise ValidationError(
+                        f"A Class Teacher is already assigned to Grade {self.grade} Section {self.section} for academic year {self.academic_year} (Assigned to: {teacher_names}). Only one class teacher is allowed."
+                    )
+
+                # 2. Check if this teacher is already assigned as Class Teacher for another grade/section
+                teacher_qs = TeacherAssignment.objects.filter(
+                    school=self.school,
+                    teacher=self.teacher,
+                    role='CLASS_TEACHER',
+                    is_active=True
+                )
+                if self.pk:
+                    teacher_qs = teacher_qs.exclude(pk=self.pk)
+                if teacher_qs.exists():
+                    existing_ta = teacher_qs.first()
+                    teacher_name = self.teacher.user.full_name if (hasattr(self.teacher, 'user') and self.teacher.user) else f"Teacher {self.teacher.tuid}"
+                    raise ValidationError(
+                        f"{teacher_name} is already assigned as Class Teacher for Grade {existing_ta.grade} Section {existing_ta.section}. A teaching staff member can only be the Class Teacher of one grade/section."
+                    )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.teacher.tuid} - {self.role} ({self.grade}-{self.section})"
@@ -196,3 +275,27 @@ class TeacherEfficiency(models.Model):
 
     class Meta:
         verbose_name_plural = "Teacher Efficiency Metrics"
+
+
+class TeacherDocument(models.Model):
+    """Documents uploaded for a teacher (qualification certificate, ID proof, contract, etc.)"""
+    DOCUMENT_TYPES = [
+        ('RESUME', 'Resume/CV'),
+        ('ID_PROOF', 'ID Proof'),
+        ('QUALIFICATION_CERTIFICATE', 'Qualification Certificate'),
+        ('OTHER', 'Other'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='documents')
+    document_type = models.CharField(max_length=30, choices=DOCUMENT_TYPES)
+    title = models.CharField(max_length=200)
+    file = models.FileField(upload_to='teacher_documents/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-uploaded_at']
+    
+    def __str__(self):
+        return f"{self.title} - {self.teacher.user.full_name if (self.teacher.user and self.teacher.user.full_name) else self.teacher.tuid}"

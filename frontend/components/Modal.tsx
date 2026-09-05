@@ -9,6 +9,7 @@ interface FormField {
   min?: number;
   placeholder?: string;
   options?: Array<{ value: string | number; label: string }>;
+  disabled?: boolean;
 }
 
 interface ModalProps {
@@ -24,6 +25,7 @@ interface ModalProps {
   submitButtonText?: string;
   submitLabel?: string; // Alternative name
   color?: 'blue' | 'purple' | 'green' | 'orange' | 'red' | 'indigo';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
   children?: React.ReactNode;
 }
 
@@ -34,6 +36,17 @@ const colorStyles = {
   orange: 'focus:ring-orange-500 hover:bg-orange-50 bg-orange-600 hover:bg-orange-700',
   red: 'focus:ring-red-500 hover:bg-red-50 bg-red-600 hover:bg-red-700',
   indigo: 'focus:ring-indigo-500 hover:bg-indigo-50 bg-indigo-600 hover:bg-indigo-700',
+};
+
+const sizeStyles = {
+  sm: 'max-w-sm',
+  md: 'max-w-md',
+  lg: 'max-w-lg',
+  xl: 'max-w-xl',
+  '2xl': 'max-w-2xl',
+  '3xl': 'max-w-3xl',
+  '4xl': 'max-w-4xl',
+  '5xl': 'max-w-5xl',
 };
 
 export default function Modal({
@@ -49,6 +62,7 @@ export default function Modal({
   submitButtonText = 'Create',
   submitLabel,
   color = 'blue',
+  size = 'md',
   children,
 }: ModalProps) {
   const buttonText = submitLabel || submitButtonText;
@@ -61,7 +75,7 @@ export default function Modal({
         <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
           <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" aria-hidden="true"></div>
           <div
-            className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl"
+            className={`inline-block w-full ${sizeStyles[size]} p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-4">
@@ -89,7 +103,7 @@ export default function Modal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+      <div className={`bg-white rounded-2xl shadow-lg ${sizeStyles[size]} w-full p-6 max-h-[90vh] overflow-y-auto`}>
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
           <button
@@ -118,8 +132,9 @@ export default function Modal({
                 <select
                   value={(formData[field.name] as string) || ''}
                   onChange={(e) => onFormChange?.(field.name, e.target.value)}
-                  className={`w-full px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg focus:outline-none focus:ring-2 ${colorStyles[color].split(' ')[0]}`}
+                  className={`w-full px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg focus:outline-none focus:ring-2 ${colorStyles[color].split(' ')[0]} disabled:bg-gray-100 disabled:text-gray-500`}
                   required={field.required}
+                  disabled={field.disabled}
                 >
                   <option value="">Select {field.label}</option>
                   {field.options?.map((opt) => (
@@ -133,16 +148,18 @@ export default function Modal({
                   value={(formData[field.name] as string) || ''}
                   onChange={(e) => onFormChange?.(field.name, e.target.value)}
                   placeholder={field.placeholder}
-                  className={`w-full px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg focus:outline-none focus:ring-2 ${colorStyles[color].split(' ')[0]} resize-none`}
+                  className={`w-full px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg focus:outline-none focus:ring-2 ${colorStyles[color].split(' ')[0]} resize-none disabled:bg-gray-100 disabled:text-gray-500`}
                   rows={3}
                   required={field.required}
+                  disabled={field.disabled}
                 />
               ) : field.type === 'checkbox' ? (
                 <input
                   type="checkbox"
                   checked={!!formData[field.name]}
                   onChange={(e) => onFormChange?.(field.name, e.target.checked)}
-                  className={`w-4 h-4 border border-gray-300 bg-white text-gray-900 rounded focus:outline-none focus:ring-2 ${colorStyles[color].split(' ')[0]}`}
+                  className={`w-4 h-4 border border-gray-300 bg-white text-gray-900 rounded focus:outline-none focus:ring-2 ${colorStyles[color].split(' ')[0]} disabled:opacity-50`}
+                  disabled={field.disabled}
                 />
               ) : field.type === 'number' ? (
                 <input
@@ -151,8 +168,9 @@ export default function Modal({
                   onChange={(e) => onFormChange?.(field.name, e.target.value ? parseFloat(e.target.value) : '')}
                   placeholder={field.placeholder}
                   min={field.min}
-                  className={`w-full px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg focus:outline-none focus:ring-2 ${colorStyles[color].split(' ')[0]}`}
+                  className={`w-full px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg focus:outline-none focus:ring-2 ${colorStyles[color].split(' ')[0]} disabled:bg-gray-100 disabled:text-gray-500`}
                   required={field.required}
+                  disabled={field.disabled}
                 />
               ) : (
                 <input
@@ -161,8 +179,9 @@ export default function Modal({
                   onChange={(e) => onFormChange?.(field.name, e.target.value)}
                   placeholder={field.placeholder}
                   maxLength={field.maxLength}
-                  className={`w-full px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg focus:outline-none focus:ring-2 ${colorStyles[color].split(' ')[0]}`}
+                  className={`w-full px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg focus:outline-none focus:ring-2 ${colorStyles[color].split(' ')[0]} disabled:bg-gray-100 disabled:text-gray-500`}
                   required={field.required}
+                  disabled={field.disabled}
                 />
               )}
             </div>

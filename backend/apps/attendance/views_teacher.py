@@ -7,6 +7,7 @@ from .models import StudentAttendance, AttendanceSession
 from apps.teachers.models import Teacher, TeacherAssignment
 from apps.students.models import Student
 from apps.enrollments.models import StudentEnrollment
+from apps.core.school_isolation import get_user_school
 
 
 @api_view(['GET'])
@@ -39,6 +40,17 @@ def get_class_students(request, assignment_id, period):
         
         # Get or create attendance session for today
         today = timezone.now().date()
+        
+        # Check Sunday or Holiday
+        from apps.schools.models_calendar import Holiday
+        is_sunday = (today.weekday() == 6)
+        is_holiday = Holiday.objects.filter(school=get_user_school(request.user), date=today).exists()
+        if is_sunday or is_holiday:
+            return Response(
+                {'error': 'Attendance cannot be marked on a Sunday or a school holiday.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
         session, created = AttendanceSession.objects.get_or_create(
             grade=str(assignment.grade),
             section=str(assignment.section),
@@ -108,6 +120,16 @@ def mark_attendance_bulk(request):
         assignment = TeacherAssignment.objects.get(id=assignment_id, teacher=teacher)
         today = timezone.now().date()
         
+        # Check Sunday or Holiday
+        from apps.schools.models_calendar import Holiday
+        is_sunday = (today.weekday() == 6)
+        is_holiday = Holiday.objects.filter(school=get_user_school(request.user), date=today).exists()
+        if is_sunday or is_holiday:
+            return Response(
+                {'error': 'Attendance cannot be marked on a Sunday or a school holiday.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
         # Get or create attendance session
         session, created = AttendanceSession.objects.get_or_create(
             grade=str(assignment.grade),

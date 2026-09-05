@@ -21,6 +21,7 @@ interface LedgerEntry {
   amount: string;
   balance_after: string;
   reference_number: string;
+  payment_mode?: string;
   notes: string;
 }
 
@@ -34,6 +35,8 @@ interface Ledger {
   current_balance: string;
   opening_balance: string;
   is_cleared: boolean;
+  is_rte_student?: boolean;
+  total_reimbursements?: number;
   entries: LedgerEntry[];
 }
 
@@ -42,6 +45,7 @@ interface StudentHistory {
   student_name: string;
   student_suid: string;
   current_grade: string;
+  is_rte_student?: boolean;
   ledgers: Ledger[];
   lifetime_total_charges: string;
   lifetime_total_payments: string;
@@ -242,43 +246,79 @@ export default function StudentLedgerHistoryPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Total Paid</p>
-                <h3 className="text-3xl font-bold text-emerald-600 mt-2">
-                  ₹{parseFloat(history.lifetime_total_payments).toLocaleString()}
-                </h3>
-                <p className="text-emerald-600 text-sm font-medium mt-1 flex items-center gap-1">
-                  <CheckCircle size={14} /> {((parseFloat(history.lifetime_total_payments) / parseFloat(history.lifetime_total_charges)) * 100).toFixed(0)}% paid
-                </p>
+          {history.is_rte_student ? (
+            <>
+              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">RTE Fee Waiver</p>
+                    <h3 className="text-3xl font-bold text-indigo-600 mt-2">
+                      ₹{(parseFloat(history.lifetime_total_charges) - history.ledgers.reduce((acc, l) => acc + (l.total_reimbursements || 0), 0)).toLocaleString('en-IN')}
+                    </h3>
+                    <p className="text-indigo-600 text-sm font-medium mt-1">Concession / Waiver</p>
+                  </div>
+                  <div className="w-14 h-14 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                    <Award className="text-white" size={24} />
+                  </div>
+                </div>
               </div>
-              <div className="w-14 h-14 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-200">
-                <Wallet className="text-white" size={24} />
-              </div>
-            </div>
-          </div>
 
-          <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Current Balance</p>
-                <h3 className={`text-3xl font-bold mt-2 ${parseFloat(history.lifetime_balance) > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                  ₹{parseFloat(history.lifetime_balance).toLocaleString()}
-                </h3>
-                <p className={`text-sm font-medium mt-1 ${parseFloat(history.lifetime_balance) > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                  {parseFloat(history.lifetime_balance) > 0 ? 'Outstanding' : 'Fully paid'}
-                </p>
+              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Total Reimbursements</p>
+                    <h3 className="text-3xl font-bold text-emerald-600 mt-2">
+                      ₹{history.ledgers.reduce((acc, l) => acc + (l.total_reimbursements || 0), 0).toLocaleString('en-IN')}
+                    </h3>
+                    <p className="text-emerald-600 text-sm font-medium mt-1">Collected from state</p>
+                  </div>
+                  <div className="w-14 h-14 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-200">
+                    <Wallet className="text-white" size={24} />
+                  </div>
+                </div>
               </div>
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg ${
-                parseFloat(history.lifetime_balance) > 0 
-                  ? 'bg-gradient-to-br from-amber-400 to-amber-600 shadow-amber-200' 
-                  : 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-emerald-200'
-              }`}>
-                {parseFloat(history.lifetime_balance) > 0 ? <Clock className="text-white" size={24} /> : <CheckCircle className="text-white" size={24} />}
+            </>
+          ) : (
+            <>
+              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Total Paid</p>
+                    <h3 className="text-3xl font-bold text-emerald-600 mt-2">
+                      ₹{parseFloat(history.lifetime_total_payments).toLocaleString()}
+                    </h3>
+                    <p className="text-emerald-600 text-sm font-medium mt-1 flex items-center gap-1">
+                      <CheckCircle size={14} /> {((parseFloat(history.lifetime_total_payments) / parseFloat(history.lifetime_total_charges)) * 100).toFixed(0)}% paid
+                    </p>
+                  </div>
+                  <div className="w-14 h-14 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-200">
+                    <Wallet className="text-white" size={24} />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+
+              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Current Balance</p>
+                    <h3 className={`text-3xl font-bold mt-2 ${parseFloat(history.lifetime_balance) > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                      ₹{parseFloat(history.lifetime_balance).toLocaleString()}
+                    </h3>
+                    <p className={`text-sm font-medium mt-1 ${parseFloat(history.lifetime_balance) > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                      {parseFloat(history.lifetime_balance) > 0 ? 'Outstanding' : 'Fully paid'}
+                    </p>
+                  </div>
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg ${
+                    parseFloat(history.lifetime_balance) > 0 
+                      ? 'bg-gradient-to-br from-amber-400 to-amber-600 shadow-amber-200' 
+                      : 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-emerald-200'
+                  }`}>
+                    {parseFloat(history.lifetime_balance) > 0 ? <Clock className="text-white" size={24} /> : <CheckCircle className="text-white" size={24} />}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Year-wise Ledgers */}
@@ -304,17 +344,27 @@ export default function StudentLedgerHistoryPage() {
                     <h4 className="font-bold text-gray-900">{formatAcademicYear(ledger.academic_year)}</h4>
                     <p className="text-sm text-gray-500">
                       ₹{parseFloat(ledger.total_charges).toLocaleString()} charged • 
-                      ₹{parseFloat(ledger.total_payments).toLocaleString()} paid
-                      {parseFloat(ledger.total_discounts) > 0 && ` • ₹${parseFloat(ledger.total_discounts).toLocaleString()} discount`}
+                      {history.is_rte_student ? (
+                        `₹${(ledger.total_reimbursements || 0).toLocaleString()} reimbursed`
+                      ) : (
+                        `₹${parseFloat(ledger.total_payments).toLocaleString()} paid`
+                      )}
+                      {!history.is_rte_student && parseFloat(ledger.total_discounts) > 0 && ` • ₹${parseFloat(ledger.total_discounts).toLocaleString()} discount`}
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-4">
                   <div className="text-right">
-                    <p className={`font-bold ${parseFloat(ledger.current_balance) > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                      Balance: ₹{parseFloat(ledger.current_balance).toLocaleString()}
-                    </p>
+                    {history.is_rte_student ? (
+                      <p className="font-bold text-indigo-600">
+                        Waiver: ₹{(parseFloat(ledger.total_charges) - (ledger.total_reimbursements || 0)).toLocaleString('en-IN')}
+                      </p>
+                    ) : (
+                      <p className={`font-bold ${parseFloat(ledger.current_balance) > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        Balance: ₹{parseFloat(ledger.current_balance).toLocaleString()}
+                      </p>
+                    )}
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
                       ledger.is_cleared ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
                     }`}>
@@ -335,13 +385,24 @@ export default function StudentLedgerHistoryPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead className="bg-gray-50">
-                        <tr className="text-xs uppercase text-gray-500 font-semibold">
-                          <th className="px-6 py-3 text-left">Date</th>
-                          <th className="px-6 py-3 text-left">Type</th>
-                          <th className="px-6 py-3 text-left">Description</th>
-                          <th className="px-6 py-3 text-right">Amount</th>
-                          <th className="px-6 py-3 text-right">Balance</th>
-                        </tr>
+                        {history.is_rte_student ? (
+                          <tr className="text-xs uppercase text-gray-500 font-semibold">
+                            <th className="px-6 py-3 text-left">Date</th>
+                            <th className="px-6 py-3 text-left">Type</th>
+                            <th className="px-6 py-3 text-left">Description</th>
+                            <th className="px-6 py-3 text-right">Amount</th>
+                            <th className="px-6 py-3 text-right">Fee Waiver</th>
+                            <th className="px-6 py-3 text-right">Reimbursements</th>
+                          </tr>
+                        ) : (
+                          <tr className="text-xs uppercase text-gray-500 font-semibold">
+                            <th className="px-6 py-3 text-left">Date</th>
+                            <th className="px-6 py-3 text-left">Type</th>
+                            <th className="px-6 py-3 text-left">Description</th>
+                            <th className="px-6 py-3 text-right">Amount</th>
+                            <th className="px-6 py-3 text-right">Balance</th>
+                          </tr>
+                        )}
                       </thead>
                       <tbody className="divide-y divide-gray-50">
                         {ledger.entries.map((entry) => (
@@ -350,15 +411,31 @@ export default function StudentLedgerHistoryPage() {
                               {new Date(entry.date).toLocaleDateString()}
                             </td>
                             <td className="px-6 py-3">
-                              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold ${getEntryTypeColor(entry.entry_type)}`}>
-                                {getEntryIcon(entry.entry_type)}
-                                {entry.entry_type}
+                              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold ${
+                                history.is_rte_student && entry.entry_type === 'PAYMENT'
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : getEntryTypeColor(entry.entry_type)
+                              }`}>
+                                {history.is_rte_student && entry.entry_type === 'PAYMENT' ? <Wallet size={16} /> : getEntryIcon(entry.entry_type)}
+                                {history.is_rte_student && entry.entry_type === 'PAYMENT' ? 'REIMBURSEMENT' : entry.entry_type}
                               </span>
                             </td>
                             <td className="px-6 py-3">
-                              <p className="text-sm font-medium text-gray-900">{entry.description}</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {history.is_rte_student && entry.entry_type === 'PAYMENT'
+                                  ? `Reimbursement Received (${entry.payment_mode?.replace('_', ' ') || 'BANK TRANSFER'})`
+                                  : entry.description}
+                              </p>
                               {entry.reference_number && (
-                                <p className="text-xs text-gray-400 font-mono">{entry.reference_number}</p>
+                                <p className="text-xs text-gray-400 font-mono">
+                                  {entry.reference_number.startsWith('RCP-') ? 'Receipt: ' : 'Transaction ID: '}
+                                  {entry.reference_number}
+                                </p>
+                              )}
+                              {entry.notes && (
+                                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2 mt-1.5 whitespace-pre-line font-medium leading-relaxed max-w-xs">
+                                  {entry.notes}
+                                </p>
                               )}
                             </td>
                             <td className={`px-6 py-3 text-right font-semibold ${
@@ -369,9 +446,20 @@ export default function StudentLedgerHistoryPage() {
                               {['PAYMENT', 'DISCOUNT', 'REFUND'].includes(entry.entry_type) ? '-' : '+'}
                               ₹{parseFloat(entry.amount).toLocaleString()}
                             </td>
-                            <td className="px-6 py-3 text-right text-sm text-gray-600">
-                              ₹{parseFloat(entry.balance_after).toLocaleString()}
-                            </td>
+                            {history.is_rte_student ? (
+                              <>
+                                <td className="px-6 py-3 text-right text-sm text-indigo-600 font-semibold">
+                                  {entry.entry_type === 'CHARGE' ? `₹${parseFloat(entry.balance_after).toLocaleString()}` : '-'}
+                                </td>
+                                <td className="px-6 py-3 text-right text-sm text-emerald-600 font-semibold">
+                                  {entry.entry_type === 'PAYMENT' ? `₹${parseFloat(entry.amount).toLocaleString()}` : '-'}
+                                </td>
+                              </>
+                            ) : (
+                              <td className="px-6 py-3 text-right text-sm text-gray-600">
+                                ₹{parseFloat(entry.balance_after).toLocaleString()}
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>

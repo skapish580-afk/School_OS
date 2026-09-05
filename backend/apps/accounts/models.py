@@ -29,7 +29,11 @@ class User(AbstractUser):
     
     # Login via Email, not Username (Modern standard)
     username = None 
-    email = models.EmailField(unique=True)
+    email = models.EmailField(unique=False, blank=True, null=True)
+
+    @classmethod
+    def _check_username_field(cls):
+        return []
     
     # Basic Demographics (Global)
     phone_number = models.CharField(max_length=15, blank=True, null=True)
@@ -45,6 +49,7 @@ class User(AbstractUser):
         ('TEACHER', 'Teacher'),
         ('STUDENT', 'Student'),
         ('PARENT', 'Parent'),
+        ('ROLE', 'Role-based Login'),
     )
     # This single field replaces is_student, is_teacher, etc.
     user_type = models.CharField(

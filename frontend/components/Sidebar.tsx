@@ -7,7 +7,7 @@ import {
   BookOpen, Settings, LogOut, GraduationCap,
   Briefcase, ArrowRightLeft, Menu, Heart, Trophy, Shield, X, AlertTriangle, UserCheck, FileText, TrendingUp, Calendar,
   ChevronDown, ChevronRight, UserCog, UploadCloud, LucideIcon,
-  Bus, Library, Box, Globe, MessageSquare
+  Bus, Library, Box, Globe, MessageSquare, Archive
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { usePermissionContext } from '@/lib/rbac-context';
@@ -19,6 +19,7 @@ interface MenuItem {
   path: string;
   icon: LucideIcon;
   module?: string;  // RBAC module for permission check
+  permission?: string; // Specific RBAC permission codename check
   feature?: string; // Feature toggle check
   subFeature?: string; // Sub-feature toggle check
 }
@@ -33,8 +34,8 @@ const menuSections: MenuSection[] = [
   {
     title: 'Main',
     items: [
-      { title: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-      { title: 'Calendar', path: '/dashboard/calendar', icon: Calendar },
+      { title: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, module: 'dashboard' },
+      { title: 'Calendar', path: '/dashboard/calendar', icon: Calendar, module: 'calendar' },
     ]
   },
   {
@@ -56,7 +57,7 @@ const menuSections: MenuSection[] = [
       { title: 'Transport', path: '/dashboard/transport', icon: Bus, module: 'transport', feature: 'TRANSPORT' },
       { title: 'Library', path: '/dashboard/library', icon: Library, module: 'library', feature: 'LIBRARY' },
       { title: 'Assets', path: '/dashboard/assets', icon: Box, module: 'assets', feature: 'ASSETS' },
-      { title: 'Data Uploads', path: '/dashboard/uploads', icon: UploadCloud },
+      { title: 'Data Uploads', path: '/dashboard/uploads', icon: UploadCloud, module: 'data_uploads' },
     ]
   },
   {
@@ -66,16 +67,17 @@ const menuSections: MenuSection[] = [
       { title: 'Certificates', path: '/dashboard/certificates', icon: FileText, module: 'students', feature: 'CERTIFICATES' },
       { title: 'Discipline', path: '/dashboard/discipline', icon: AlertTriangle, module: 'discipline', feature: 'DISCIPLINE' },
       { title: 'Transfers', path: '/dashboard/transfers', icon: ArrowRightLeft, module: 'transfers', feature: 'TRANSFERS' },
-      { title: 'Community', path: '/dashboard/community', icon: Globe, feature: 'COMMUNITY' },
-      { title: 'Alumni', path: '/dashboard/alumni', icon: GraduationCap, feature: 'STUDENTS' },
+      { title: 'Community', path: '/dashboard/community', icon: Globe, module: 'community' },
+      { title: 'Alumni', path: '/dashboard/alumni', icon: GraduationCap, module: 'alumni', feature: 'STUDENTS' },
+      { title: 'Student Archive', path: '/dashboard/student-archive', icon: Archive, module: 'student_archive' },
     ]
   },
   {
     title: 'System',
     items: [
-      { title: 'Analytics', path: '/dashboard/analytics', icon: TrendingUp, module: 'reports', feature: 'AI_ANALYTICS' },
-      { title: 'Reports', path: '/dashboard/reports', icon: FileText, module: 'reports', feature: 'REPORTS' },
-      { title: 'Promotion', path: '/dashboard/promotion', icon: CalendarCheck, module: 'enrollments' },
+      { title: 'Analytics', path: '/dashboard/analytics', icon: TrendingUp, module: 'reports' },
+      { title: 'Reports', path: '/dashboard/reports', icon: FileText, module: 'reports' },
+      { title: 'Promotion', path: '/dashboard/promotion', icon: CalendarCheck, module: 'enrollments', permission: 'enrollments.promote_students' },
     ]
   }
 ];
@@ -84,7 +86,7 @@ const menuSections: MenuSection[] = [
 const settingsItems: MenuItem[] = [
   { title: 'General', path: '/dashboard/settings', icon: Settings, module: 'settings' },
   { title: 'Roles', path: '/dashboard/settings/roles', icon: Shield, module: 'roles' },
-  { title: 'Assignments', path: '/dashboard/settings/role-assignments', icon: UserCog, module: 'roles' },
+  { title: 'Assignment settings', path: '/dashboard/settings/role-assignments', icon: UserCog, module: 'roles', permission: 'roles.assign_role' },
 ];
 
 export default function Sidebar() {
@@ -94,12 +96,13 @@ export default function Sidebar() {
   const [settingsExpanded, setSettingsExpanded] = useState(pathname?.startsWith('/dashboard/settings'));
 
   // RBAC Permission Context
-  const { hasModuleAccess, isAdmin, loading: permissionsLoading } = usePermissionContext();
+  const { permissions, hasModuleAccess, isAdmin, hasPermission, loading: permissionsLoading } = usePermissionContext();
   const { isFeatureEnabled, loading: featuresLoading } = useFeatures();
 
   // Filter menu items based on permissions
   const filteredMenuSections = useMemo(() => {
-    if (permissionsLoading || featuresLoading) return menuSections; // Show all while loading
+    // While loading: return empty so unauthorized items never flash to ROLE users
+    if (permissionsLoading || featuresLoading) return [];
 
     return menuSections.map(section => ({
       ...section,
@@ -109,7 +112,12 @@ export default function Sidebar() {
           if (!isFeatureEnabled(item.feature, item.subFeature)) return false;
         }
 
-        // 2. Check RBAC (Role Based Access)
+        // 2. Check Specific Permission
+        if (item.permission && !hasPermission(item.permission)) {
+          return false;
+        }
+
+        // 3. Check RBAC (Role Based Access)
         // No module requirement = always show
         if (!item.module) return true;
         // Admin sees everything
@@ -118,23 +126,38 @@ export default function Sidebar() {
         return hasModuleAccess(item.module);
       })
     })).filter(section => section.items.length > 0); // Remove empty sections
-  }, [hasModuleAccess, isAdmin, isFeatureEnabled, permissionsLoading, featuresLoading]);
+  }, [hasModuleAccess, isAdmin, hasPermission, isFeatureEnabled, permissionsLoading, featuresLoading]);
 
   // Filter settings items
   const filteredSettingsItems = useMemo(() => {
-    if (permissionsLoading) return settingsItems;
+    if (permissionsLoading) return [];
+
+    const userPerms = permissions?.permissions || [];
+    const hasRoleAssignmentAccess = (
+      isAdmin ||
+      hasPermission('roles.assign_role') ||
+      hasPermission('teachers.assign_role_teaching') ||
+      hasPermission('teachers.assign_role_non_teaching') ||
+      hasPermission('teachers.manage_non_teaching') ||
+      userPerms.some(p => p.startsWith('assignment_settings.'))
+    );
 
     return settingsItems.filter(item => {
+      if (item.path === '/dashboard/settings/role-assignments') {
+        return hasRoleAssignmentAccess;
+      }
+      if (item.permission && !hasPermission(item.permission)) return false;
       if (!item.module) return true;
       if (isAdmin) return true;
       return hasModuleAccess(item.module);
     });
-  }, [hasModuleAccess, isAdmin, permissionsLoading]);
+  }, [permissions, hasModuleAccess, isAdmin, hasPermission, permissionsLoading]);
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
-    router.push('/login');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
   };
 
   const isExactMatch = (path: string) => pathname === path;
@@ -173,6 +196,18 @@ export default function Sidebar() {
 
         {/* MENU */}
         <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          {/* Loading skeleton while permissions/features resolve */}
+          {(permissionsLoading || featuresLoading) && (
+            <div className="space-y-2 animate-pulse">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3 px-3 py-2.5">
+                  <div className="w-4 h-4 bg-slate-700 rounded" />
+                  <div className="h-3 bg-slate-700 rounded w-24" />
+                </div>
+              ))}
+            </div>
+          )}
+
           {filteredMenuSections.map((section, idx) => (
             <div key={idx} className="space-y-1">
               <div className="px-3 mb-2">

@@ -60,8 +60,14 @@ class IssueReturnLog(models.Model):
     return_condition = models.CharField(max_length=20, choices=RETURN_CONDITION_CHOICES, null=True, blank=True)
 
     def __str__(self):
-        borrower = self.student.full_name_display if self.student else self.teacher.full_name
-        return f"{self.book.title} issued to {borrower}"
+        if self.student:
+            borrower = getattr(self.student, 'full_name_display', str(self.student))
+        elif self.teacher:
+            borrower = getattr(self.teacher, 'full_name', str(self.teacher))
+        else:
+            borrower = 'Unknown Borrower'
+        book_title = self.book.title if self.book else 'Book'
+        return f"{book_title} issued to {borrower}"
 
 class LibraryClearance(models.Model):
     student = models.OneToOneField(Student, on_delete=models.CASCADE, related_name='library_clearance')

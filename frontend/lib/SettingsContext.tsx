@@ -8,6 +8,7 @@ interface SchoolSettings {
   id: number;
   school_name: string;
   school_code: string;
+  school_logo?: string;
   dark_mode: boolean;
   primary_color: string;
 
@@ -26,6 +27,8 @@ interface SchoolSettings {
   gatepass_sender_email: string;
   gatepass_app_password: string;
   gatepass_verification_base_url: string;
+  gatepass_creation_email_body?: string;
+  gatepass_departure_email_body?: string;
 
   // Notifications
   email_notifications: boolean;
@@ -33,8 +36,15 @@ interface SchoolSettings {
   push_notifications: boolean;
 
   // Academic
+  academic_year_start_month?: number;
+  academic_year_start_day?: number;
+  academic_year_end_month?: number;
+  academic_year_end_day?: number;
+  current_academic_year?: string;
+  available_academic_years?: string[];
   academic_year_format: string;
   allow_continuation_after_10: boolean;
+
 
   // Privacy
   show_student_photos: boolean;

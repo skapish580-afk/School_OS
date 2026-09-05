@@ -3,41 +3,67 @@
 import { useEffect, useState } from 'react';
 import api, { getMediaUrl } from '@/lib/api';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   Plus, Search, User, ChevronRight, Loader2,
   Mail, Phone, GraduationCap
 } from 'lucide-react';
-import { useResourcePermissions } from '@/lib/rbac-context';
-import FeatureGuard from '@/components/FeatureGuard';
+import { usePermissionContext } from '@/lib/rbac-context';
 
 export default function StudentListPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   // RBAC Permissions
-  const { canCreate, canEdit, canDelete } = useResourcePermissions('students', 'student');
+  const { hasPermission, isAdmin } = usePermissionContext();
+  const canAddStudent = isAdmin || hasPermission('students.add_student');
+  const canViewAny = isAdmin || 
+    hasPermission('students.view_student_only') || 
+    hasPermission('students.view_profile') || 
+    hasPermission('students.view_journey') || 
+    hasPermission('students.view_health') ||
+    hasPermission('teachers.view_teaching') ||
+    hasPermission('academics.view_class');
+
+  const [teacherAssignments, setTeacherAssignments] = useState<any[]>([]);
+
+  const normalizeGrade = (g: string) => {
+    if (!g) return '';
+    return g.toLowerCase().replace('grade', '').trim();
+  };
+
+  const matchesGrade = (g1: string, g2: string) => {
+    return normalizeGrade(g1) === normalizeGrade(g2);
+  };
 
   useEffect(() => {
-    fetchStudents();
-  }, []);
+    if (canViewAny) {
+      fetchStudents();
+    } else {
+      setLoading(false);
+    }
+  }, [canViewAny]);
 
   const fetchStudents = async () => {
     try {
-      const response = await api.get('/students/');
-      console.log('Students API Response:', response.data);
-      // Handle both array and paginated responses
+      const [response, assignmentsRes] = await Promise.all([
+        api.get('/students/?status=ACTIVE'),
+        api.get('/teachers/assignments/?is_active=true').catch(() => ({ data: [] }))
+      ]);
+
       const studentData = Array.isArray(response.data) ? response.data : response.data.results || [];
-      console.log('Parsed student data:', studentData);
+      const assignList = Array.isArray(assignmentsRes.data) ? assignmentsRes.data : assignmentsRes.data.results || [];
+      
+      setTeacherAssignments(assignList);
       setStudents(studentData);
       setError(null);
     } catch (error: any) {
       console.error("Failed to fetch students:", error);
       const errorMsg = error.response?.data?.detail || error.message || 'Failed to load students';
-      console.error('Error message:', errorMsg);
       setError(errorMsg);
     } finally {
       setLoading(false);
@@ -47,12 +73,29 @@ export default function StudentListPage() {
   // Safe Name Getter (uses the serializer's full_name field)
   const getStudentName = (s: any) => s.full_name || "Unknown Student";
 
-  // Filter logic
   const filteredStudents = students.filter(s => {
+    // 1. Teacher Assignment Scoping (only for non-admin teaching staff)
+    if (!isAdmin && teacherAssignments.length > 0) {
+      const studentClass = (s.current_class || s.grade_name || s.section_name || '').toLowerCase();
+      const hasAssignment = teacherAssignments.some((ta: any) => {
+        if (!ta.grade) return true;
+        const taGrade = normalizeGrade(ta.grade);
+        const taSection = (ta.section || '').trim().toLowerCase();
+        
+        const matchFull = studentClass.includes(`${taGrade}-${taSection}`);
+        const matchGradeSection = matchesGrade(s.grade_name || '', taGrade) && (s.section_letter || s.section_name || '').trim().toLowerCase() === taSection;
+        return matchFull || matchGradeSection;
+      });
+
+      if (!hasAssignment) return false;
+    }
+
+    // 2. Search Query Filter
     const name = getStudentName(s).toLowerCase();
     const suid = (s.suid || '').toLowerCase();
+    const roll = (s.roll_number || '').toLowerCase();
     const query = search.toLowerCase();
-    return name.includes(query) || suid.includes(query);
+    return name.includes(query) || suid.includes(query) || roll.includes(query);
   });
 
   if (loading) return (
@@ -60,6 +103,17 @@ export default function StudentListPage() {
       <Loader2 className="animate-spin mr-2" /> Loading Directory...
     </div>
   );
+
+  if (!canViewAny) {
+    return (
+      <div className="min-h-screen bg-gray-50/50 p-8 flex items-center justify-center">
+        <div className="bg-white p-8 rounded-xl border border-red-200 shadow-sm max-w-md text-center">
+          <h2 className="text-lg font-bold text-red-600 mb-2">Access Denied</h2>
+          <p className="text-sm text-gray-600">You do not have permission to view the student directory.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (error) {
     return (
@@ -91,14 +145,14 @@ export default function StudentListPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={18} />
               <input
                 type="text"
-                placeholder="Search name or ID..."
+                placeholder="Search name, ID or roll..."
                 className="pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none w-64 shadow-sm text-sm transition-all"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
             {/* Add Button - Only show if user has create permission */}
-            {canCreate && (
+            {canAddStudent && (
               <Link href="/dashboard/students/add">
                 <button className="bg-black text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-gray-800 transition-all flex items-center gap-2 shadow-sm">
                   <Plus size={16} /> Add Student
@@ -123,7 +177,7 @@ export default function StudentListPage() {
               <thead>
                 <tr className="bg-gray-50/50 border-b border-gray-100 text-xs uppercase text-gray-500 font-semibold tracking-wider">
                   <th className="px-6 py-4">Student Name</th>
-                  <th className="px-6 py-4">Roll ID</th>
+                  <th className="px-6 py-4">Roll / SUID</th>
                   <th className="px-6 py-4">Contact Info</th>
                   <th className="px-6 py-4">Class</th>
                   <th className="px-6 py-4 text-right">Action</th>
@@ -134,12 +188,14 @@ export default function StudentListPage() {
                   const displayName = getStudentName(student);
                   const displayEmail = student.email;
                   const displayPhone = student.phone_number;
-                  const currentClass = student.current_class || "Unassigned";
+                  const currentClass = student.current_class || (student.grade_name && student.section_letter ? `${student.grade_name}-${student.section_letter}` : student.grade_name || "Unassigned");
+                  const isTeacherPortal = (pathname && pathname.startsWith('/teachers')) || (typeof window !== 'undefined' && window.location.pathname.startsWith('/teachers'));
+                  const studentDetailUrl = isTeacherPortal ? `/teachers/remarks/${student.id}` : `/dashboard/students/${student.id}`;
 
                   return (
                     <tr
                       key={student.id}
-                      onClick={() => router.push(`/dashboard/students/${student.id}`)} // This page handles detailed view
+                      onClick={() => router.push(studentDetailUrl)} // Handles detailed view per portal
                       className="hover:bg-blue-50/30 cursor-pointer transition-colors group"
                     >
                       {/* Name & Avatar */}
@@ -153,8 +209,13 @@ export default function StudentListPage() {
                             )}
                           </div>
                           <div>
-                            <div className="font-bold text-gray-900 text-sm group-hover:text-blue-600 transition-colors">
+                            <div className="font-bold text-gray-900 text-sm group-hover:text-blue-600 transition-colors flex items-center gap-2">
                               {displayName}
+                              {student.status === 'TEMPORARY' && (
+                                <span className="text-[10px] font-extrabold uppercase bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200 select-none">
+                                  Temporary
+                                </span>
+                              )}
                             </div>
                             <div className="text-xs text-gray-400 capitalize">Student</div>
                           </div>
@@ -163,9 +224,16 @@ export default function StudentListPage() {
 
                       {/* ID */}
                       <td className="px-6 py-4">
-                        <span className="font-mono text-xs font-medium bg-gray-100 text-gray-600 px-2 py-1 rounded border border-gray-200">
-                          {student.suid}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className="font-mono text-xs font-medium bg-gray-100 text-gray-600 px-2 py-1 rounded border border-gray-200 w-max">
+                            {student.suid}
+                          </span>
+                          {student.roll_number && (
+                            <span className="font-mono text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded w-max">
+                              Roll: {student.roll_number}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Contact */}
@@ -201,9 +269,48 @@ export default function StudentListPage() {
                         )}
                       </td>
 
-                      {/* Action Arrow */}
-                      <td className="px-6 py-4 text-right text-gray-400">
-                        <ChevronRight size={18} className="ml-auto group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+                      {/* Action Arrow / Confirm Button */}
+                      <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-2">
+                          {student.status === 'TEMPORARY' && (
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const hasDetails = !!(
+                                  student.first_name &&
+                                  student.email &&
+                                  student.date_of_birth &&
+                                  (student.address || student.address_line1) &&
+                                  student.latitude !== null &&
+                                  student.latitude !== undefined &&
+                                  student.longitude !== null &&
+                                  student.longitude !== undefined
+                                );
+                                if (!hasDetails) {
+                                  alert("Cannot confirm admission. Please fill in all required details (Name, Email, DOB, Address, Latitude, Longitude) by editing the student profile first.");
+                                  return;
+                                }
+                                try {
+                                  const res = await api.post(`/students/${student.id}/confirm_admission/`);
+                                  if (res.data?.success) {
+                                    alert("Admission confirmed successfully!");
+                                    fetchStudents();
+                                  }
+                                } catch (err: any) {
+                                  alert(err.response?.data?.error || "Failed to confirm admission.");
+                                }
+                              }}
+                              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm mr-2 active:scale-95 whitespace-nowrap"
+                            >
+                              Confirm Admission
+                            </button>
+                          )}
+                          <ChevronRight 
+                            size={18} 
+                            className="text-gray-400 group-hover:text-blue-500 group-hover:translate-x-1 transition-all flex-shrink-0"
+                            onClick={() => router.push(studentDetailUrl)}
+                          />
+                        </div>
                       </td>
                     </tr>
                   );

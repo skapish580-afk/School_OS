@@ -5,8 +5,13 @@ import api from '@/lib/api';
 import { BookOpen, Search, ArrowLeft, Loader2, Calendar, User, Book, Plus, Filter, X, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
+import { usePermissionContext } from '@/lib/rbac-context';
 
 export default function CirculationLogPage() {
+  const { hasPermission, isAdmin } = usePermissionContext();
+  const canView = isAdmin || hasPermission('library.view_circulation_log') || hasPermission('library.edit_circulation_log') || hasPermission('library.view_transactions') || hasPermission('library.issue_book');
+  const canEdit = isAdmin || hasPermission('library.edit_circulation_log') || hasPermission('library.issue_book');
+
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -196,12 +201,14 @@ export default function CirculationLogPage() {
             <p className="text-slate-500 font-medium">Issue and return history.</p>
           </div>
         </div>
-        <button 
-          onClick={() => setShowIssueModal(true)}
-          className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-100 flex items-center gap-2"
-        >
-          <Plus size={20} /> Issue book
-        </button>
+        {canEdit && (
+          <button 
+            onClick={() => setShowIssueModal(true)}
+            className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-100 flex items-center gap-2"
+          >
+            <Plus size={20} /> Issue book
+          </button>
+        )}
       </div>
 
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex gap-4 ring-1 ring-slate-100">
@@ -501,6 +508,7 @@ export default function CirculationLogPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4">
+                  {canEdit ? (
                     <button 
                       onClick={() => {
                         setSelectedLog(log);
@@ -510,7 +518,12 @@ export default function CirculationLogPage() {
                     >
                       <CheckCircle size={14} /> Collected
                     </button>
-                  </td>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black tracking-tight bg-blue-100 text-blue-700">
+                      ISSUED
+                    </span>
+                  )}
+                </td>
                 </tr>
               ))}
             </tbody>

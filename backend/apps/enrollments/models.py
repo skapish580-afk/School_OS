@@ -33,7 +33,7 @@ class StudentEnrollment(models.Model):
     roll_number = models.CharField(max_length=10, blank=True, null=True) 
     
     # Timeframe
-    academic_year = models.CharField(max_length=20, default="2025-2026")
+    academic_year = models.CharField(max_length=20, default="")
     enrollment_date = models.DateField(auto_now_add=True)
     
     # Status
@@ -43,6 +43,8 @@ class StudentEnrollment(models.Model):
         ('TRANSFERRED', 'Transferred Out'),
         ('GRADUATED', 'Graduated'),  # Changed from ALUMNI to GRADUATED
         ('COMPLETED', 'Completed (End of enrollment period)'),
+        ('WITHDRAWN', 'Withdrawn'),
+        ('TEMPORARY', 'Temporary'),
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE')
     

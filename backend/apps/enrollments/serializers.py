@@ -10,6 +10,10 @@ class StudentEnrollmentSerializer(serializers.ModelSerializer):
     current_class = serializers.SerializerMethodField()
     school = serializers.PrimaryKeyRelatedField(queryset=School.objects.all(), required=False)
     
+    student_photo = serializers.SerializerMethodField()
+    student_history = serializers.SerializerMethodField()
+    report_cards = serializers.SerializerMethodField()
+    
     class Meta:
         model = StudentEnrollment
         fields = '__all__'
@@ -17,3 +21,24 @@ class StudentEnrollmentSerializer(serializers.ModelSerializer):
     
     def get_current_class(self, obj):
         return f"{obj.grade}-{obj.section}"
+
+    def get_student_photo(self, obj):
+        if obj.student and obj.student.profile_photo:
+            return obj.student.profile_photo.url
+        return None
+
+    def get_student_history(self, obj):
+        if not obj.student:
+            return []
+        from apps.students.models import StudentHistory
+        from apps.students.serializers import StudentHistorySerializer
+        histories = StudentHistory.objects.filter(student=obj.student).order_by('academic_year_name')
+        return StudentHistorySerializer(histories, many=True).data
+
+    def get_report_cards(self, obj):
+        if not obj.student:
+            return []
+        from apps.academics.models import ReportCard
+        from apps.academics.serializers import ReportCardSerializer
+        report_cards = ReportCard.objects.filter(student=obj.student)
+        return ReportCardSerializer(report_cards, many=True, context=self.context).data

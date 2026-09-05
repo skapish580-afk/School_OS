@@ -26,25 +26,40 @@ def teacher_exam_list(request):
     Industry Standard: Teacher sees only PUBLISHED exams for their subjects
     """
     try:
-        teacher = Teacher.objects.get(user=request.user)
+        from apps.core.school_isolation import get_user_school
+        school = get_user_school(request.user)
+
+        teacher = Teacher.objects.filter(user=request.user).first()
+        if not teacher and hasattr(request.user, 'teacher_profile'):
+            teacher = request.user.teacher_profile
+
+        if not teacher:
+            return Response({
+                'exams': [],
+                'message': 'Teacher profile not found'
+            })
         
-        # Get teacher's assignments (classes they teach)
+        # Get teacher's active assignments for their active school
         assignments = TeacherAssignment.objects.filter(
             teacher=teacher,
             is_active=True
-        ).select_related('school')
-        
+        )
+        if school:
+            assignments = assignments.filter(school=school)
+
         if not assignments.exists():
             return Response({
                 'exams': [],
-                'message': 'No teaching assignments found'
+                'message': 'No active teaching assignments found'
             })
         
-        # Get all subject mappings for this teacher
+        # Get all active subject mappings for this teacher and school
         subject_mappings = SubjectMapping.objects.filter(
             teacher=teacher,
             is_active=True
-        ).select_related('subject', 'section', 'section__grade')
+        ).select_related('subject', 'section', 'section__grade_config')
+        if school:
+            subject_mappings = subject_mappings.filter(school=school)
         
         exams_data = []
         
@@ -58,7 +73,7 @@ def teacher_exam_list(request):
             for exam in exams:
                 # Count how many students have marks entered
                 total_students = StudentEnrollment.objects.filter(
-                    grade=str(mapping.section.grade.grade_number),
+                    grade=str(mapping.section.grade_config.grade_name),
                     section=mapping.section.section_letter,
                     status='ACTIVE'
                 ).count()
@@ -218,6 +233,13 @@ def exam_marks_entry(request, exam_id):
             })
         
         elif request.method == 'POST':
+            # Check if exam is locked
+            if exam.marks_locked:
+                return Response(
+                    {'error': 'Cannot enter or modify marks for a locked exam.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             # Save marks (bulk update)
             marks_data = request.data.get('marks', [])
             action_type = request.data.get('action', 'save_draft')  # save_draft or submit
@@ -383,8 +405,15 @@ def finalize_promotion(request, student_id):
     try:
         from .promotion_service import PromotionService
         
-        # Check if user has permission (admin only)
-        if not request.user.is_staff and not request.user.is_superuser:
+        # Check if user has permission (admin only or has promote_students permission)
+        from apps.accounts.permission_utils import has_permission
+        is_admin = (
+            request.user.is_staff or 
+            request.user.is_superuser or 
+            request.user.user_type in ['PLATFORM_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'] or
+            has_permission(request.user, 'enrollments.promote_students')
+        )
+        if not is_admin:
             return Response(
                 {'error': 'Only administrators can finalize promotion decisions'},
                 status=status.HTTP_403_FORBIDDEN

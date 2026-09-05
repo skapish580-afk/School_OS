@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Clock, Calendar, Users, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Clock, Calendar, Users, BookOpen, AlertCircle } from 'lucide-react';
+import api from '@/lib/api';
 
 interface ClassSchedule {
   id: string;
   day: string;
+  day_code?: string;
   period: number;
   start_time: string;
   end_time: string;
@@ -17,91 +19,59 @@ interface ClassSchedule {
 }
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const PERIODS = [
-  { number: 1, start: '08:30', end: '09:30' },
-  { number: 2, start: '09:30', end: '10:30' },
-  { number: 3, start: '10:30', end: '11:30' },
-  { number: 4, start: '11:30', end: '12:30' },
-  { number: 5, start: '13:00', end: '14:00' },
-  { number: 6, start: '14:00', end: '15:00' }
-];
 
 export default function SchedulePage() {
   const [schedule, setSchedule] = useState<ClassSchedule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedWeek, setSelectedWeek] = useState(new Date());
 
   useEffect(() => {
     fetchSchedule();
-  }, [selectedWeek]);
+  }, []);
 
   const fetchSchedule = async () => {
+    setLoading(true);
     try {
-      // Mock data - TODO: Connect to real API
-      const mockSchedule: ClassSchedule[] = [
-        // Monday
-        { id: '1', day: 'Monday', period: 1, start_time: '08:30', end_time: '09:30', 
-          subject: 'Mathematics', grade: '9', section: 'B', room: '201', student_count: 40 },
-        { id: '2', day: 'Monday', period: 2, start_time: '09:30', end_time: '10:30', 
-          subject: 'Mathematics', grade: '10', section: 'A', room: '301', student_count: 38 },
-        { id: '3', day: 'Monday', period: 4, start_time: '11:30', end_time: '12:30', 
-          subject: 'Physics', grade: '11', section: 'A', room: '401', student_count: 35 },
-        
-        // Tuesday
-        { id: '4', day: 'Tuesday', period: 1, start_time: '08:30', end_time: '09:30', 
-          subject: 'Mathematics', grade: '9', section: 'A', room: '201', student_count: 42 },
-        { id: '5', day: 'Tuesday', period: 3, start_time: '10:30', end_time: '11:30', 
-          subject: 'Mathematics', grade: '9', section: 'B', room: '201', student_count: 40 },
-        { id: '6', day: 'Tuesday', period: 5, start_time: '13:00', end_time: '14:00', 
-          subject: 'Physics', grade: '11', section: 'B', room: '401', student_count: 33 },
-        
-        // Wednesday
-        { id: '7', day: 'Wednesday', period: 2, start_time: '09:30', end_time: '10:30', 
-          subject: 'Mathematics', grade: '10', section: 'A', room: '301', student_count: 38 },
-        { id: '8', day: 'Wednesday', period: 4, start_time: '11:30', end_time: '12:30', 
-          subject: 'Mathematics', grade: '9', section: 'A', room: '201', student_count: 42 },
-        
-        // Thursday
-        { id: '9', day: 'Thursday', period: 1, start_time: '08:30', end_time: '09:30', 
-          subject: 'Physics', grade: '11', section: 'A', room: '401', student_count: 35 },
-        { id: '10', day: 'Thursday', period: 3, start_time: '10:30', end_time: '11:30', 
-          subject: 'Mathematics', grade: '9', section: 'B', room: '201', student_count: 40 },
-        
-        // Friday
-        { id: '11', day: 'Friday', period: 2, start_time: '09:30', end_time: '10:30', 
-          subject: 'Mathematics', grade: '10', section: 'A', room: '301', student_count: 38 },
-        { id: '12', day: 'Friday', period: 5, start_time: '13:00', end_time: '14:00', 
-          subject: 'Physics', grade: '11', section: 'B', room: '401', student_count: 33 },
-      ];
-
-      setSchedule(mockSchedule);
+      const response = await api.get('/academics/timetables/my_schedule/');
+      const data = Array.isArray(response.data) ? response.data : response.data.results || [];
+      setSchedule(data);
     } catch (error) {
       console.error('Failed to fetch schedule', error);
+      setSchedule([]);
     } finally {
       setLoading(false);
     }
   };
 
   const getClassForSlot = (day: string, period: number) => {
-    return schedule.find(s => s.day === day && s.period === period);
+    return schedule.find(s => 
+      (s.day.toLowerCase() === day.toLowerCase() || s.day_code?.toLowerCase() === day.substring(0, 3).toLowerCase()) &&
+      s.period === period
+    );
   };
 
-  const getWeekRange = () => {
-    const start = new Date(selectedWeek);
-    start.setDate(start.getDate() - start.getDay() + 1); // Monday
-    const end = new Date(start);
-    end.setDate(end.getDate() + 5); // Saturday
-    return `${start.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-  };
+  // Derive unique period numbers from schedule or default 1..6
+  const existingPeriodNums = Array.from(new Set(schedule.map(s => s.period))).sort((a, b) => a - b);
+  const periodNumbers = existingPeriodNums.length > 0 
+    ? Array.from(new Set([...existingPeriodNums, 1, 2, 3, 4, 5, 6])).sort((a, b) => a - b)
+    : [1, 2, 3, 4, 5, 6];
 
   const totalClasses = schedule.length;
-  const totalStudents = schedule.reduce((sum, cls) => sum + cls.student_count, 0);
-  const subjects = [...new Set(schedule.map(s => s.subject))];
+
+  // Calculate unique student count across distinct grade-sections
+  const uniqueSectionsMap = new Map<string, number>();
+  schedule.forEach(s => {
+    const key = `${s.grade}-${s.section}`;
+    if (!uniqueSectionsMap.has(key)) {
+      uniqueSectionsMap.set(key, s.student_count || 0);
+    }
+  });
+  const totalStudents = Array.from(uniqueSectionsMap.values()).reduce((sum, val) => sum + val, 0);
+  const subjects = [...new Set(schedule.map(s => s.subject).filter(Boolean))];
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="text-gray-600">Loading schedule...</div>
+        <div className="text-gray-600 font-medium">Loading schedule from Academics Timetable...</div>
       </div>
     );
   }
@@ -109,46 +79,19 @@ export default function SchedulePage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">My Schedule</h1>
-          <p className="text-gray-600 mt-1">Weekly timetable and class assignments</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              const newDate = new Date(selectedWeek);
-              newDate.setDate(newDate.getDate() - 7);
-              setSelectedWeek(newDate);
-            }}
-            className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <div className="px-4 py-2 bg-gray-100 rounded-lg font-medium">
-            {getWeekRange()}
-          </div>
-          <button
-            onClick={() => {
-              const newDate = new Date(selectedWeek);
-              newDate.setDate(newDate.getDate() + 7);
-              setSelectedWeek(newDate);
-            }}
-            className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            <ChevronRight size={20} />
-          </button>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">My Classes</h1>
+        <p className="text-gray-600 mt-1">Weekly timetable fetched from Academics Module</p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
           <div className="flex items-center gap-3">
             <BookOpen className="h-8 w-8 text-blue-600" />
             <div>
               <div className="text-2xl font-bold text-blue-700">{totalClasses}</div>
-              <div className="text-blue-600 text-sm">Classes This Week</div>
+              <div className="text-blue-600 text-sm font-medium">Classes This Week</div>
             </div>
           </div>
         </div>
@@ -157,7 +100,7 @@ export default function SchedulePage() {
             <Users className="h-8 w-8 text-green-600" />
             <div>
               <div className="text-2xl font-bold text-green-700">{totalStudents}</div>
-              <div className="text-green-600 text-sm">Total Students</div>
+              <div className="text-green-600 text-sm font-medium">Total Students</div>
             </div>
           </div>
         </div>
@@ -166,7 +109,7 @@ export default function SchedulePage() {
             <Calendar className="h-8 w-8 text-purple-600" />
             <div>
               <div className="text-2xl font-bold text-purple-700">{subjects.length}</div>
-              <div className="text-purple-600 text-sm">Subjects</div>
+              <div className="text-purple-600 text-sm font-medium">Assigned Subjects</div>
             </div>
           </div>
         </div>
@@ -177,7 +120,7 @@ export default function SchedulePage() {
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 w-32">Period</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 w-36">Period</th>
               {DAYS.map(day => (
                 <th key={day} className="px-4 py-3 text-center text-sm font-semibold text-gray-700">
                   {day}
@@ -186,46 +129,63 @@ export default function SchedulePage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {PERIODS.map(period => (
-              <tr key={period.number} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-sm">
-                  <div className="font-semibold text-gray-900">Period {period.number}</div>
-                  <div className="text-xs text-gray-500 flex items-center gap-1 mt-1">
-                    <Clock size={12} />
-                    {period.start} - {period.end}
-                  </div>
-                </td>
-                {DAYS.map(day => {
-                  const classInfo = getClassForSlot(day, period.number);
-                  
-                  return (
-                    <td key={day} className="px-2 py-2">
-                      {classInfo ? (
-                        <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-3 hover:shadow-md transition-shadow">
-                          <div className="font-semibold text-gray-900 text-sm mb-1">
-                            {classInfo.subject}
-                          </div>
-                          <div className="text-xs text-gray-600 space-y-1">
-                            <div className="flex items-center justify-between">
-                              <span className="font-medium">Grade {classInfo.grade}{classInfo.section}</span>
-                              <span className="flex items-center gap-1">
-                                <Users size={12} />
-                                {classInfo.student_count}
-                              </span>
+            {periodNumbers.map(pNum => {
+              // Find sample times for this period number
+              const sample = schedule.find(s => s.period === pNum);
+              const timeDisplay = sample?.start_time && sample?.end_time 
+                ? `${sample.start_time} - ${sample.end_time}` 
+                : null;
+
+              return (
+                <tr key={pNum} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm">
+                    <div className="font-semibold text-gray-900">Period {pNum}</div>
+                    {timeDisplay && (
+                      <div className="text-xs text-gray-500 flex items-center gap-1 mt-1 font-medium">
+                        <Clock size={12} />
+                        {timeDisplay}
+                      </div>
+                    )}
+                  </td>
+                  {DAYS.map(day => {
+                    const classInfo = getClassForSlot(day, pNum);
+                    
+                    return (
+                      <td key={day} className="px-2 py-2">
+                        {classInfo ? (
+                          <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-3 hover:shadow-md transition-shadow">
+                            <div className="font-semibold text-gray-900 text-sm mb-1">
+                              {classInfo.subject}
                             </div>
-                            <div className="text-gray-500">Room: {classInfo.room}</div>
+                            <div className="text-xs text-gray-600 space-y-1">
+                              <div className="flex items-center justify-between font-medium">
+                                <span>Grade {classInfo.grade}{classInfo.section}</span>
+                                <span className="flex items-center gap-1 text-green-700 font-bold">
+                                  <Users size={12} />
+                                  {classInfo.student_count}
+                                </span>
+                              </div>
+                              {classInfo.room && (
+                                <div className="text-gray-500 font-medium">Room: {classInfo.room}</div>
+                              )}
+                              {classInfo.start_time && classInfo.end_time && !timeDisplay && (
+                                <div className="text-gray-500 text-[10px]">
+                                  {classInfo.start_time} - {classInfo.end_time}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="h-20 bg-gray-50 rounded-lg flex items-center justify-center">
-                          <span className="text-xs text-gray-400">Free</span>
-                        </div>
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+                        ) : (
+                          <div className="h-20 bg-gray-50/50 rounded-lg flex items-center justify-center border border-dashed border-gray-200">
+                            <span className="text-xs text-gray-400 font-medium">Free</span>
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -233,28 +193,42 @@ export default function SchedulePage() {
       {/* Subject-wise Breakdown */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Subject-wise Breakdown</h2>
-        <div className="space-y-3">
-          {subjects.map(subject => {
-            const classes = schedule.filter(s => s.subject === subject);
-            const totalStudents = classes.reduce((sum, cls) => sum + cls.student_count, 0);
-            const sections = [...new Set(classes.map(s => `${s.grade}-${s.section}`))];
-            
-            return (
-              <div key={subject} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div>
-                  <div className="font-semibold text-gray-900">{subject}</div>
-                  <div className="text-sm text-gray-600 mt-1">
-                    {sections.join(', ')}
+        {subjects.length === 0 ? (
+          <div className="p-4 bg-gray-50 rounded-lg text-center text-gray-500 flex items-center justify-center gap-2">
+            <AlertCircle size={18} className="text-amber-500" />
+            <span>No subject timetable entries assigned to your teacher login.</span>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {subjects.map(subject => {
+              const classes = schedule.filter(s => s.subject === subject);
+              const secMap = new Map<string, number>();
+              classes.forEach(s => {
+                const key = `Grade ${s.grade}${s.section}`;
+                if (!secMap.has(key)) {
+                  secMap.set(key, s.student_count || 0);
+                }
+              });
+              const subjectStudents = Array.from(secMap.values()).reduce((sum, val) => sum + val, 0);
+              const sectionList = Array.from(secMap.keys());
+              
+              return (
+                <div key={subject} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <div>
+                    <div className="font-semibold text-gray-900">{subject}</div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      {sectionList.join(', ')}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-gray-900">{classes.length} {classes.length === 1 ? 'period' : 'periods'}/week</div>
+                    <div className="text-xs text-gray-500 font-medium">{subjectStudents} total students</div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold text-gray-900">{classes.length}</div>
-                  <div className="text-xs text-gray-500">{totalStudents} students</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

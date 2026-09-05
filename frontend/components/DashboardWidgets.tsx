@@ -33,6 +33,7 @@ interface DashboardWidgetProps {
   icon?: React.ReactNode;
   link?: string;
   linkLabel?: string;
+  headerActions?: React.ReactNode;
 }
 
 /**
@@ -44,30 +45,54 @@ export function DashboardWidget({
   module, 
   icon,
   link,
-  linkLabel = "View All"
+  linkLabel = "View All",
+  headerActions
 }: DashboardWidgetProps) {
-  const { hasModuleAccess, isAdmin, loading } = usePermissionContext();
+  const { hasModuleAccess, hasPermission, isAdmin, loading } = usePermissionContext();
+
+  const hasAccessToLink = (linkPath: string) => {
+    if (isAdmin) return true;
+    if (linkPath === '/dashboard/calendar') {
+      return hasPermission('dashboard.access_calendar');
+    }
+    if (linkPath.includes('/students')) return hasModuleAccess('students');
+    if (linkPath.includes('/teachers')) return hasModuleAccess('teachers');
+    if (linkPath.includes('/attendance')) return hasModuleAccess('attendance');
+    if (linkPath.includes('/finance')) return hasModuleAccess('finance');
+    if (linkPath.includes('/discipline')) return hasModuleAccess('discipline');
+    if (linkPath.includes('/gatepass')) return hasModuleAccess('gatepass');
+    if (linkPath.includes('/academics')) return hasModuleAccess('academics');
+    if (linkPath.includes('/transfers')) return hasModuleAccess('transfers');
+    if (linkPath.includes('/health')) return hasModuleAccess('health');
+    if (linkPath.includes('/achievements')) return hasModuleAccess('achievements');
+    return true;
+  };
 
   // If module specified, check permission
   if (module && !loading && !isAdmin && !hasModuleAccess(module)) {
     return null;
   }
 
+  const showLink = link && hasAccessToLink(link);
+
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
         <h3 className="font-bold text-gray-800 flex items-center gap-2">
           {icon}
           {title}
         </h3>
-        {link && (
-          <Link 
-            href={link}
-            className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-          >
-            {linkLabel} <ChevronRight size={16} />
-          </Link>
-        )}
+        <div className="flex items-center gap-4">
+          {headerActions}
+          {showLink && (
+            <Link 
+              href={link}
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+            >
+              {linkLabel} <ChevronRight size={16} />
+            </Link>
+          )}
+        </div>
       </div>
       <div className="p-5">
         {children}
@@ -86,7 +111,25 @@ export function QuickStatCard({
   stat: QuickStat;
   module?: string;
 }) {
-  const { hasModuleAccess, isAdmin, loading } = usePermissionContext();
+  const { hasModuleAccess, hasPermission, isAdmin, loading } = usePermissionContext();
+
+  const hasAccessToLink = (linkPath: string) => {
+    if (isAdmin) return true;
+    if (linkPath === '/dashboard/calendar') {
+      return hasPermission('dashboard.access_calendar');
+    }
+    if (linkPath.includes('/students')) return hasModuleAccess('students');
+    if (linkPath.includes('/teachers')) return hasModuleAccess('teachers');
+    if (linkPath.includes('/attendance')) return hasModuleAccess('attendance');
+    if (linkPath.includes('/finance')) return hasModuleAccess('finance');
+    if (linkPath.includes('/discipline')) return hasModuleAccess('discipline');
+    if (linkPath.includes('/gatepass')) return hasModuleAccess('gatepass');
+    if (linkPath.includes('/academics')) return hasModuleAccess('academics');
+    if (linkPath.includes('/transfers')) return hasModuleAccess('transfers');
+    if (linkPath.includes('/health')) return hasModuleAccess('health');
+    if (linkPath.includes('/achievements')) return hasModuleAccess('achievements');
+    return true;
+  };
 
   if (module && !loading && !isAdmin && !hasModuleAccess(module)) {
     return null;
@@ -113,7 +156,9 @@ export function QuickStatCard({
     </div>
   );
 
-  if (stat.link) {
+  const showLink = stat.link && hasAccessToLink(stat.link);
+
+  if (showLink && stat.link) {
     return <Link href={stat.link}>{content}</Link>;
   }
 
@@ -242,6 +287,7 @@ export function RoleBasedQuickStats() {
       icon: <GraduationCap size={20} className="text-emerald-600" />,
       color: 'bg-emerald-100',
       link: '/dashboard/students',
+      module: 'students',
       settingKey: 'show_alumni_stats',
     },
     {
@@ -252,6 +298,7 @@ export function RoleBasedQuickStats() {
       icon: <Plane size={20} className="text-violet-600" />,
       color: 'bg-violet-100',
       link: '/dashboard/transfers',
+      module: 'transfers',
       settingKey: 'show_transfers_widget',
     },
   ];
@@ -534,6 +581,7 @@ export function AlumniStatsWidget() {
   return (
     <DashboardWidget
       title="Alumni Statistics"
+      module="students"
       icon={<GraduationCap size={18} className="text-emerald-500" />}
       link="/dashboard/students"
       linkLabel="View Students"
@@ -586,6 +634,7 @@ export function TransfersWidget() {
   return (
     <DashboardWidget
       title="Transfers"
+      module="transfers"
       icon={<Plane size={18} className="text-violet-500" />}
     >
       {loading ? (
@@ -634,6 +683,7 @@ export function MedicalRecordsWidget() {
   return (
     <DashboardWidget
       title="Medical Records Review"
+      module="health"
       icon={<HeartPulse size={18} className="text-rose-500" />}
       link="/dashboard/health"
       linkLabel="Health Module"

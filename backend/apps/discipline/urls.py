@@ -17,5 +17,6 @@ urlpatterns = [
     path('summary/', DisciplineViewSet.as_view({'get': 'summary'}), name='summary'),
     path('karma/student/<uuid:student_id>/summary/', get_student_karma_summary, name='student_karma_summary'),
     path('karma/bulk-add/', bulk_add_karma, name='bulk_add_karma'),
+    path('', DisciplineViewSet.as_view({'post': 'create', 'get': 'list'}), name='discipline_root'),
     path('', include(router.urls)),
 ]

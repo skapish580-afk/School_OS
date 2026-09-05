@@ -86,7 +86,7 @@ def get_section_strength(section):
     from apps.enrollments.models import StudentEnrollment
     
     return StudentEnrollment.objects.filter(
-        grade=section.grade.grade_name,
+        grade=section.grade_config.grade_name,
         section=section.section_letter,
         status='ACTIVE'
     ).count()

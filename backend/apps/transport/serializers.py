@@ -16,6 +16,7 @@ class RouteSerializer(serializers.ModelSerializer):
 
 class VehicleSerializer(serializers.ModelSerializer):
     route_name = serializers.ReadOnlyField(source='route.name')
+    route_waypoints = serializers.SerializerMethodField()
     assigned_students_count = serializers.SerializerMethodField()
     assigned_student_ids = serializers.SerializerMethodField()
 
@@ -23,12 +24,17 @@ class VehicleSerializer(serializers.ModelSerializer):
         model = Vehicle
         fields = '__all__'
         read_only_fields = ['school']
+
+    def get_route_waypoints(self, obj):
+        if obj.route and obj.route.waypoints:
+            return obj.route.waypoints
+        return None
     
     def get_assigned_students_count(self, obj):
-        return obj.transportassignment_set.count()
+        return obj.transportassignment_set.filter(student__status__in=['ACTIVE', 'TEMPORARY']).count()
 
     def get_assigned_student_ids(self, obj):
-        return list(obj.transportassignment_set.values_list('student_id', flat=True))
+        return list(obj.transportassignment_set.filter(student__status__in=['ACTIVE', 'TEMPORARY']).values_list('student_id', flat=True))
 
 class TransportAssignmentSerializer(serializers.ModelSerializer):
     student_name = serializers.ReadOnlyField(source='student.full_name_display')

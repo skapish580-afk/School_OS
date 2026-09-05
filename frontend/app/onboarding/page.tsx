@@ -33,30 +33,20 @@ export default function OnboardingPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.post('/onboarding/register/', formData);
-      setOnboardingData(res.data);
-      setStep(4); // Go to Payment Step
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Registration failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePayment = async () => {
-    setLoading(true);
-    // Simulate Razorpay success for this demo
-    // In real life, you'd open Razorpay Checkout here
-    try {
-      const res = await api.post('/onboarding/verify-payment/', {
-        razorpay_order_id: onboardingData.razorpay_order_id,
+      // 1. Submit onboarding registration
+      const regRes = await api.post('/onboarding/register/', formData);
+      
+      // 2. Programmatically verify payment in background to provision the school immediately
+      const verifyRes = await api.post('/onboarding/verify-payment/', {
+        razorpay_order_id: regRes.data.razorpay_order_id,
         razorpay_payment_id: 'pay_dummy_123',
         razorpay_signature: 'sig_dummy_123'
       });
-      setOnboardingData(res.data);
-      setStep(5); // Success
+
+      setOnboardingData(verifyRes.data);
+      setStep(4); // Go to Success Step (4)
     } catch (err: any) {
-      setError('Payment verification failed');
+      setError(err.response?.data?.error || 'Registration failed');
     } finally {
       setLoading(false);
     }
@@ -68,7 +58,7 @@ export default function OnboardingPage() {
         
         {/* Progress Bar */}
         <div className="flex h-2 bg-gray-100">
-            {[1,2,3,4,5].map(s => (
+            {[1,2,3,4].map(s => (
                 <div key={s} className={`flex-1 transition-all duration-500 ${step >= s ? 'bg-blue-600' : ''}`} />
             ))}
         </div>
@@ -133,7 +123,7 @@ export default function OnboardingPage() {
                                 <li>• Attendance</li>
                                 <li>• Academics</li>
                                 <li>• Max 200 Students</li>
-                            </ul>
+                             </ul>
                         </button>
                         <button 
                             onClick={() => setFormData({...formData, plan: 'PREMIUM'})}
@@ -151,29 +141,12 @@ export default function OnboardingPage() {
                     </div>
                     {error && <p className="text-red-500 text-sm">{error}</p>}
                     <button onClick={handleRegister} disabled={loading} className="w-full bg-blue-600 text-white p-4 rounded-2xl font-bold flex items-center justify-center gap-2">
-                        {loading ? <Loader2 className="animate-spin" /> : "Confirm & Pay"}
+                        {loading ? <Loader2 className="animate-spin" /> : "Confirm & Register"}
                     </button>
                 </div>
             )}
 
             {step === 4 && (
-                <div className="space-y-6 text-center animate-in zoom-in-95 duration-500">
-                    <h2 className="text-2xl font-bold">Secure Payment</h2>
-                    <p className="text-gray-500">Proceed to Razorpay to complete your subscription of <br/><span className="font-bold text-gray-900 text-xl">₹{onboardingData?.amount}</span></p>
-                    <div className="bg-gray-50 p-6 rounded-3xl border border-dashed border-gray-300">
-                        <p className="text-xs text-gray-400 mb-4 uppercase font-bold tracking-widest">Order Details</p>
-                        <div className="flex justify-between text-sm">
-                            <span className="text-gray-500">Order ID</span>
-                            <span className="font-mono">{onboardingData?.razorpay_order_id}</span>
-                        </div>
-                    </div>
-                    <button onClick={handlePayment} disabled={loading} className="w-full bg-green-600 text-white p-5 rounded-2xl font-black text-xl flex items-center justify-center gap-2 shadow-lg shadow-green-100">
-                        {loading ? <Loader2 className="animate-spin" /> : "Pay Now"}
-                    </button>
-                </div>
-            )}
-
-            {step === 5 && (
                 <div className="space-y-8 text-center animate-in zoom-in-90 duration-700">
                     <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto">
                         <CheckCircle2 size={48} />

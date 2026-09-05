@@ -3,10 +3,17 @@ from .models import Book, IssueReturnLog, LibraryClearance, StockAudit, LibraryV
 import datetime
 
 class BookSerializer(serializers.ModelSerializer):
+    isbn = serializers.CharField(required=True, allow_blank=False, help_text="ISBN number is compulsory")
+
     class Meta:
         model = Book
         fields = '__all__'
         read_only_fields = ['school', 'available_copies']
+
+    def validate_isbn(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("ISBN number is compulsory when adding a book.")
+        return value.strip()
 
 class IssueReturnLogSerializer(serializers.ModelSerializer):
     student_name = serializers.ReadOnlyField(source='student.full_name_display')

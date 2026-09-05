@@ -5,25 +5,37 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { 
   LayoutDashboard, ClipboardCheck, BookOpen, MessageSquare, 
-  Calendar, User, LogOut, Menu, X, Bell
+  Calendar, User, LogOut, Menu, X, Bell, Library, DollarSign
 } from 'lucide-react';
+import { PermissionProvider } from '@/lib/rbac-context';
+import { FeatureProvider } from '@/lib/FeatureContext';
 
 export default function TeacherLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [teacher, setTeacher] = useState<any>(null);
 
   useEffect(() => {
+    if (pathname === '/teachers/login') {
+      setIsCheckingAuth(false);
+      return;
+    }
+
     const token = localStorage.getItem('access_token');
     if (!token) {
-      router.push('/login');
+      setIsAuthenticated(false);
+      setIsCheckingAuth(false);
+      window.location.href = '/teachers/login';
       return;
     }
     
-    // Fetch teacher info
+    setIsAuthenticated(true);
+    setIsCheckingAuth(false);
     fetchTeacherInfo();
-  }, []);
+  }, [pathname]);
 
   const fetchTeacherInfo = async () => {
     try {
@@ -38,6 +50,12 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
           employee_id: data.tuid,
           subjects: data.certified_subjects ? data.certified_subjects.split(',') : []
         });
+      } else if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user');
+        setIsAuthenticated(false);
+        window.location.href = '/teachers/login';
       }
     } catch (error) {
       console.error('Failed to fetch teacher info', error);
@@ -47,7 +65,9 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
-    router.push('/login');
+    localStorage.removeItem('user');
+    setIsAuthenticated(false);
+    window.location.href = '/teachers/login';
   };
 
   const menuItems = [
@@ -56,11 +76,34 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     { title: 'Marks', path: '/teachers/marks', icon: BookOpen },
     { title: 'Remarks', path: '/teachers/remarks', icon: MessageSquare },
     { title: 'My Classes', path: '/teachers/schedule', icon: Calendar },
+    { title: 'Library', path: '/teachers/library', icon: Library },
+    { title: 'Salary', path: '/teachers/salary', icon: DollarSign },
     { title: 'Profile', path: '/teachers/profile', icon: User },
   ];
 
+  if (pathname === '/teachers/login') {
+    return <>{children}</>;
+  }
+
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm font-medium text-gray-600">Verifying authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
-    <div className="flex h-screen bg-gray-50">
+    <PermissionProvider>
+      <FeatureProvider>
+        <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
       <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-gradient-to-b from-green-700 to-green-800 text-white transform transition-transform duration-200 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
@@ -156,6 +199,8 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
           onClick={() => setSidebarOpen(false)}
         />
       )}
-    </div>
+        </div>
+      </FeatureProvider>
+    </PermissionProvider>
   );
 }

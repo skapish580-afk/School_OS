@@ -42,6 +42,11 @@ class Permission(models.Model):
         ('settings', 'Settings'),
         ('users', 'User Management'),
         ('roles', 'Role Management'),
+        ('transport', 'Transport'),
+        ('library', 'Library'),
+        ('assets', 'Assets'),
+        ('dashboard', 'Dashboard'),
+        ('calendar', 'Calendar'),
     ]
     
     # Action types
@@ -153,11 +158,55 @@ class Role(models.Model):
         blank=True
     )
     
-    # Hierarchy (higher = more authority)
+    timetable_grade_scopes = models.ManyToManyField(
+        'schools.GradeConfiguration',
+        blank=True,
+        related_name='scoped_roles',
+        help_text="Grades for which this role can manage timetables"
+    )
+    
+    syllabus_subject_scopes = models.ManyToManyField(
+        'academics.SubjectMapping',
+        blank=True,
+        related_name='scoped_syllabus_roles',
+        help_text="Allocated subjects for which this role can manage/view syllabus"
+    )
+    
+    exam_subject_scopes = models.ManyToManyField(
+        'academics.SubjectMapping',
+        blank=True,
+        related_name='scoped_exam_roles',
+        help_text="Allocated subjects for which this role can manage/create exams"
+    )
+    
+    exam_type_scopes = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Exam types for which this role can manage/create exams"
+    )
+    
+    marks_subject_scopes = models.ManyToManyField(
+        'academics.SubjectMapping',
+        blank=True,
+        related_name='scoped_marks_roles',
+        help_text="Allocated subjects for which this role can enter/manage marks"
+    )
+    
+    attendance_section_scopes = models.ManyToManyField(
+        'academics.Section',
+        blank=True,
+        related_name='scoped_attendance_roles',
+        help_text="Sections for which this role can view/edit attendance"
+    )
+    
+    SCHOOL_ADMIN_HIERARCHY_LEVEL = 101
+
+    # Hierarchy (higher = more authority to edit/overwrite records)
     hierarchy_level = models.IntegerField(
         default=1,
-        help_text="Higher level = more authority. Admin=100, Principal=90, etc."
+        help_text="Role hierarchy level (1-100). Higher level = authority to edit/overwrite records created by lower roles. School Admin is fixed at 101."
     )
+
     
     # Status
     is_active = models.BooleanField(default=True)
@@ -176,15 +225,58 @@ class Role(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    # Custom credentials login fields
+    username = models.CharField(max_length=150, blank=True, null=True)
+    associated_user = models.OneToOneField(
+        'accounts.User',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='associated_role'
+    )
+    plain_password = models.CharField(
+        max_length=128,
+        blank=True,
+        null=True,
+        help_text="Plain text password for email notifications"
+    )
+    
+    teacher_role_scopes = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Teaching staff user IDs for which this role can manage/assign roles"
+    )
+    student_role_scopes = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Student user IDs for which this role can manage/assign roles"
+    )
+
     class Meta:
         ordering = ['-hierarchy_level', 'name']
         unique_together = ['school', 'name']  # Unique role names per school
         verbose_name = 'Role'
         verbose_name_plural = 'Roles'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'username'],
+                name='unique_school_role_username',
+                condition=models.Q(username__isnull=False)
+            )
+        ]
     
     def __str__(self):
         school_name = self.school.name if self.school else "System"
         return f"{self.name} ({school_name})"
+    
+    def save(self, *args, **kwargs):
+        if self.username:
+            self.username = self.username.strip()
+            if not self.username:
+                self.username = None
+        else:
+            self.username = None
+        super().save(*args, **kwargs)
     
     def has_permission(self, codename):
         """Check if role has a specific permission."""
@@ -245,6 +337,24 @@ class UserRole(models.Model):
         null=True,
         blank=True,
         help_text="Limit role to specific subject"
+    )
+    
+    syllabus_scope_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('ALL', 'All Subjects'),
+            ('TEACHER_ASSIGNED', 'Teacher Assigned'),
+            ('CUSTOM', 'Custom Subjects'),
+        ],
+        default='ALL',
+        help_text="Scope of syllabus permissions"
+    )
+    
+    syllabus_custom_subjects = models.ManyToManyField(
+        'academics.Subject',
+        blank=True,
+        related_name='scoped_user_roles_syllabus',
+        help_text="Custom subjects for syllabus scope"
     )
     
     # Status
@@ -357,3 +467,19 @@ class RolePermissionLog(models.Model):
     
     def __str__(self):
         return f"{self.action} by {self.actor} at {self.timestamp}"
+
+
+# ============================================
+# SIGNALS FOR CLEANUP
+# ============================================
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+
+@receiver(post_delete, sender=Role)
+def delete_associated_user(sender, instance, **kwargs):
+    if instance.associated_user:
+        try:
+            instance.associated_user.delete()
+        except Exception:
+            pass
+

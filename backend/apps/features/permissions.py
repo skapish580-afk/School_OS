@@ -18,13 +18,18 @@ def can(user, action_code, feature_code=None):
         return True
     
     # 2c. School Admin has full access to their school's data
-    if user_type in ['SCHOOL_ADMIN', 'ADMIN']:
+    if user_type in ['SCHOOL_ADMIN', 'ADMIN', 'ROLE']:
         return True
 
     # 3. School Feature Gate
     # If the feature is turned OFF for the school, nobody (except Admin) can use it.
     if feature_code:
         school_id = getattr(user, 'school_id', None)
+        if not school_id:
+            from apps.core.school_isolation import get_user_school
+            sch = get_user_school(user)
+            school_id = sch.id if sch else None
+
         if school_id and not school_has_feature(school_id, feature_code):
             return False
 

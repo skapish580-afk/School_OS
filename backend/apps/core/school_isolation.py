@@ -22,25 +22,34 @@ class SchoolIsolationMixin:
         """Get filter kwargs for school isolation."""
         user = self.request.user
         
-        # Only explicit Platform Admin sees everything (not just any superuser)
-        if user.user_type == 'PLATFORM_ADMIN':
+        # Superuser and platform admin see everything or filter by explicit school param
+        if user.is_superuser or user.user_type == 'PLATFORM_ADMIN':
+            school_id = self.request.query_params.get('school') or self.request.query_params.get('school_id')
+            if school_id:
+                return {self.school_field: school_id}
             return {}
         
         # Helper to get the right value for the filter
         def get_filter_val(school_obj):
             if self.school_field in ['id', 'pk']:
-                return school_obj.id
+                return school_obj.id if hasattr(school_obj, 'id') else school_obj
             return school_obj
 
-        # School admin/teacher sees only their school
-        if user.school:
+        # Dynamically resolve active school for user / request context
+        user_school = self.get_user_school()
+        if user_school:
+            return {self.school_field: get_filter_val(user_school)}
+
+        # Direct user.school fallback
+        if getattr(user, 'school', None):
             return {self.school_field: get_filter_val(user.school)}
         
         # Try to get school from teacher profile
         if hasattr(user, 'teacher_profile') and user.teacher_profile:
             teacher = user.teacher_profile
-            if hasattr(teacher, 'school') and teacher.school:
-                return {self.school_field: get_filter_val(teacher.school)}
+            assoc = teacher.school_associations.filter(status='ACTIVE').first()
+            if assoc:
+                return {self.school_field: get_filter_val(assoc.school)}
         
         # No school association - show nothing
         return {self.school_field + '__isnull': False, 'pk': None}  # Returns empty queryset
@@ -52,19 +61,69 @@ class SchoolIsolationMixin:
         if school_filter:
             queryset = queryset.filter(**school_filter)
         return queryset
-    
-    def get_user_school(self):
-        """Get the school for the current user."""
+
+    def perform_create(self, serializer):
+        """Save instance and record hierarchy edit log event."""
         user = self.request.user
+        extra = {}
+        if hasattr(serializer.Meta.model, 'created_by') and user.is_authenticated:
+            extra['created_by'] = user
+        if hasattr(serializer.Meta.model, 'school') and 'school' not in serializer.validated_data:
+            school = self.get_user_school()
+            if school:
+                extra['school'] = school
+        instance = serializer.save(**extra)
         
-        if user.school:
-            return user.school
+        from apps.accounts.permission_utils import log_hierarchy_record_edit
+        summary = f"Created {instance.__class__.__name__} ({str(instance)})"
+        log_hierarchy_record_edit(user, instance, 'CREATE', changes_summary=summary, school=self.get_user_school())
+
+    def perform_update(self, serializer):
+        """Save updated instance and record hierarchy edit log event with diff summary."""
+        user = self.request.user
+        extra = {}
+        if hasattr(serializer.Meta.model, 'last_updated_by') and user.is_authenticated:
+            extra['last_updated_by'] = user
+        elif hasattr(serializer.Meta.model, 'updated_by') and user.is_authenticated:
+            extra['updated_by'] = user
+            
+        changed_fields = list(serializer.validated_data.keys()) if hasattr(serializer, 'validated_data') else []
+        instance = serializer.save(**extra)
         
-        if hasattr(user, 'teacher_profile') and user.teacher_profile:
-            teacher = user.teacher_profile
-            if hasattr(teacher, 'school'):
-                return teacher.school
-        
+        from apps.accounts.permission_utils import log_hierarchy_record_edit
+        diff_str = f"Updated fields: {', '.join(changed_fields)}" if changed_fields else f"Updated {instance.__class__.__name__}"
+        log_hierarchy_record_edit(user, instance, 'UPDATE', changes_summary=diff_str, school=self.get_user_school())
+
+    def get_user_school(self):
+        """Get the school for the current user or request context."""
+        req = getattr(self, 'request', None)
+        if req:
+            school_id = (
+                req.query_params.get('school') or
+                req.query_params.get('school_id') or
+                (hasattr(req, 'data') and isinstance(req.data, dict) and (req.data.get('school') or req.data.get('school_id'))) or
+                req.headers.get('X-School-Id') or
+                req.COOKIES.get('active_school_id')
+            )
+            if school_id:
+                try:
+                    from apps.schools.models import School
+                    s = School.objects.filter(id=school_id).first()
+                    if s:
+                        return s
+                except Exception:
+                    pass
+
+            if hasattr(req, 'user') and req.user.is_authenticated:
+                user_school = get_user_school(req.user)
+                if user_school:
+                    return user_school
+
+                # Fallback for platform admin / superuser
+                if req.user.is_superuser or req.user.user_type == 'PLATFORM_ADMIN':
+                    from apps.schools.models import School
+                    return School.objects.first()
+
         return None
 
 
@@ -83,8 +142,8 @@ class IsSchoolAdminOrPlatformAdmin(permissions.BasePermission):
         if request.user.user_type == 'PLATFORM_ADMIN' or request.user.is_superuser:
             return True
         
-        # School admin has access
-        if request.user.user_type in ['SCHOOL_ADMIN', 'ADMIN']:
+        # School admin or role has access
+        if request.user.user_type in ['SCHOOL_ADMIN', 'ADMIN', 'ROLE']:
             return True
         
         return False
@@ -97,8 +156,8 @@ class IsSchoolAdminOrPlatformAdmin(permissions.BasePermission):
         if request.user.user_type == 'PLATFORM_ADMIN' or request.user.is_superuser:
             return True
         
-        # School admin can only access their school's objects
-        if request.user.user_type in ['SCHOOL_ADMIN', 'ADMIN']:
+        # School admin or role can only access their school's objects
+        if request.user.user_type in ['SCHOOL_ADMIN', 'ADMIN', 'ROLE']:
             obj_school = getattr(obj, 'school', None)
             if obj_school is None and hasattr(obj, 'student'):
                 obj_school = getattr(obj.student, 'school', None)
@@ -121,8 +180,8 @@ class IsSchoolMember(permissions.BasePermission):
         if request.user.user_type == 'PLATFORM_ADMIN' or request.user.is_superuser:
             return True
         
-        # School admin and teachers have access
-        if request.user.user_type in ['SCHOOL_ADMIN', 'ADMIN', 'TEACHER']:
+        # School admin, teachers, and roles have access
+        if request.user.user_type in ['SCHOOL_ADMIN', 'ADMIN', 'TEACHER', 'ROLE']:
             return True
         
         return False
@@ -132,20 +191,39 @@ def get_user_school(user):
     """
     Helper function to get school for any user type.
     """
-    if not user.is_authenticated:
+    if not user or not user.is_authenticated:
         return None
     
-    # Direct school assignment
-    if user.school:
+    # 1. Direct school assignment on User
+    if getattr(user, 'school', None):
         return user.school
-    
-    # Try teacher profile
-    if hasattr(user, 'teacher_profile') and user.teacher_profile:
-        teacher = user.teacher_profile
-        if hasattr(teacher, 'school') and teacher.school:
+
+    # 2. Check virtual Role or UserRole school
+    from apps.accounts.rbac_models import Role, UserRole
+    role = Role.objects.filter(associated_user=user).first()
+    if role and role.school:
+        return role.school
+
+    ur = UserRole.objects.filter(user=user, is_active=True).first()
+    if ur and ur.school:
+        return ur.school
+
+    # 3. Try teacher profile / teacher school association
+    from apps.teachers.models import Teacher
+    teacher = Teacher.objects.filter(user=user).first()
+    if not teacher and role and role.associated_user:
+        teacher = Teacher.objects.filter(user=role.associated_user).first()
+
+    if teacher:
+        if getattr(teacher.user, 'school', None):
+            return teacher.user.school
+        assoc = teacher.school_associations.filter(status='ACTIVE').order_by('-created_at').first()
+        if assoc:
+            return assoc.school
+        if getattr(teacher, 'school', None):
             return teacher.school
     
-    # Try student profile
+    # 4. Try student profile
     if hasattr(user, 'student_profile') and user.student_profile:
         student = user.student_profile
         if hasattr(student, 'school') and student.school:

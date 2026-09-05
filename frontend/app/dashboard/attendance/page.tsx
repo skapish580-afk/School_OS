@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useResourcePermissions } from '@/lib/rbac-context';
 import FeatureGuard from '@/components/FeatureGuard';
+import PermissionDenied from '@/components/PermissionDenied';
 
 export default function AttendancePage() {
   // Controls
@@ -27,9 +28,11 @@ export default function AttendancePage() {
   const [userRole, setUserRole] = useState('');
   const [grades, setGrades] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
+  const [subjectMappings, setSubjectMappings] = useState<any[]>([]);
+  const [selectedSubjectId, setSelectedSubjectId] = useState('');
 
   // RBAC Permissions
-  const { canCreate: canMarkAttendance, canEdit: canEditAttendance } = useResourcePermissions('attendance', 'attendance');
+  const { canView: canViewAttendance, canCreate: canMarkAttendance, canEdit: canEditAttendance, loading: rbacLoading } = useResourcePermissions('attendance', 'attendance');
 
   // Status Colors Helper
   const getStatusColor = (status: string) => {
@@ -88,16 +91,75 @@ export default function AttendancePage() {
       }
     };
 
+    const fetchSubjectMappings = async () => {
+      try {
+        const response = await api.get('/academics/subject-mappings/');
+        const data = response.data.results || response.data;
+        setSubjectMappings(data);
+      } catch (error) {
+        console.error('Failed to fetch subject mappings', error);
+      }
+    };
+
     fetchUserRole();
     fetchGrades();
     fetchSections();
+    fetchSubjectMappings();
   }, []);
+
+  const isGrade11or12 = (g: string) => {
+    const clean = g.toLowerCase().replace('grade', '').trim();
+    return clean === '11' || clean === '12';
+  };
+
+  const isFutureDate = (d: string) => {
+    if (!d) return false;
+    const todayStr = new Date().toISOString().split('T')[0];
+    return d > todayStr;
+  };
+
+  const isUnlockAllowed = (d: string) => {
+    if (!d) return false;
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const limitDate = new Date(today);
+    limitDate.setDate(today.getDate() - 2);
+    limitDate.setHours(0,0,0,0);
+    const sDate = new Date(d);
+    sDate.setHours(0,0,0,0);
+    return sDate >= limitDate;
+  };
+
+  const sectionObj = sections.find(
+    (s) => s.grade_name === grade && s.section_letter === section
+  );
+
+  const allocatedSubjects = subjectMappings.filter((sm) => 
+    sm.is_active && 
+    (sm.section_id === sectionObj?.id || sm.section_name === `${grade}-${section}`)
+  );
+
+  // Auto-select first subject for grade 11/12
+  useEffect(() => {
+    if (isGrade11or12(grade) && allocatedSubjects.length > 0) {
+      const exists = allocatedSubjects.some(s => s.subject_id === selectedSubjectId);
+      if (!exists) {
+        setSelectedSubjectId(allocatedSubjects[0].subject_id);
+      }
+    } else {
+      setSelectedSubjectId('');
+    }
+  }, [grade, section, subjectMappings, selectedSubjectId]);
 
   // Fetch Register
   const fetchRegister = async () => {
     setLoading(true);
     try {
-      const response = await api.get(`/attendance/daily_register/?grade=${grade}&section=${section}&date=${date}`);
+      let url = `/attendance/daily_register/?grade=${grade}&section=${section}&date=${date}`;
+      if (isGrade11or12(grade) && selectedSubjectId) {
+        url += `&subject=${selectedSubjectId}`;
+      }
+      const response = await api.get(url);
       setSession(response.data);
       setStudents(response.data.records || []);
       setFilteredStudents(response.data.records || []);
@@ -112,9 +174,13 @@ export default function AttendancePage() {
   // Load automatically when filters change
   useEffect(() => {
     if (grade && section) {
+      const isHighSchool = isGrade11or12(grade);
+      if (isHighSchool && !selectedSubjectId) {
+        return;
+      }
       fetchRegister();
     }
-  }, [grade, section, date]);
+  }, [grade, section, date, selectedSubjectId]);
 
   // Filter students based on search query
   useEffect(() => {
@@ -128,7 +194,7 @@ export default function AttendancePage() {
 
   // Toggle Status
   const toggleStatus = (studentId: number, currentStatus: string) => {
-    if (session?.is_locked && userRole !== 'ADMIN') return;
+    if (session?.is_locked || isFutureDate(date)) return;
     if (!canMarkAttendance && !canEditAttendance) return; // RBAC check
 
     const statusCycle = ['PRESENT', 'ABSENT', 'OUT'];
@@ -172,8 +238,8 @@ export default function AttendancePage() {
   };
 
   const handleLockSession = async () => {
-    if (userRole !== 'ADMIN') {
-      alert("Only admins can lock attendance sessions");
+    if (!canMarkAttendance && !canEditAttendance) {
+      alert("You do not have permission to lock attendance registers.");
       return;
     }
 
@@ -187,8 +253,13 @@ export default function AttendancePage() {
   };
 
   const handleUnlockSession = async () => {
-    if (userRole !== 'ADMIN') {
-      alert("Only admins can unlock attendance sessions");
+    if (!canMarkAttendance && !canEditAttendance) {
+      alert("You do not have permission to unlock attendance registers.");
+      return;
+    }
+
+    if (!isUnlockAllowed(date)) {
+      alert("Unlocking is only allowed for the past 2 days' attendance.");
       return;
     }
 
@@ -198,6 +269,8 @@ export default function AttendancePage() {
       alert("Attendance register unlocked successfully");
     } catch (error) {
       console.error("Unlock failed", error);
+      const errMsg = (error as any).response?.data?.error || "Unlock failed.";
+      alert(errMsg);
     }
   };
 
@@ -209,6 +282,18 @@ export default function AttendancePage() {
     late: session?.late_count || 0,
     out: session?.out_count || 0
   };
+
+  if (rbacLoading) {
+    return (
+      <div className="flex justify-center items-center py-40">
+        <Loader2 className="animate-spin text-blue-600" size={50} />
+      </div>
+    );
+  }
+
+  if (!canViewAttendance) {
+    return <PermissionDenied title="Access Denied" message="You do not have permission to view attendance registers." />;
+  }
 
   return (
     <FeatureGuard feature="ATTENDANCE">
@@ -227,7 +312,7 @@ export default function AttendancePage() {
               {session?.is_locked ? (
                 <button
                   onClick={handleUnlockSession}
-                  disabled={userRole !== 'ADMIN'}
+                  disabled={(!canMarkAttendance && !canEditAttendance) || !isUnlockAllowed(date)}
                   className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 disabled:opacity-50 rounded-lg font-semibold transition"
                 >
                   <Unlock size={18} /> Unlock
@@ -235,7 +320,7 @@ export default function AttendancePage() {
               ) : (
                 <button
                   onClick={handleLockSession}
-                  disabled={userRole !== 'ADMIN'}
+                  disabled={(!canMarkAttendance && !canEditAttendance) || isFutureDate(date)}
                   className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 disabled:opacity-50 rounded-lg font-semibold transition"
                 >
                   <Lock size={18} /> Lock Register
@@ -244,6 +329,12 @@ export default function AttendancePage() {
             </div>
           </div>
         </div>
+
+        {isFutureDate(date) && (
+          <div className="p-4 bg-amber-50 border border-amber-250 rounded-xl text-amber-800 text-center font-bold text-lg shadow-sm">
+            ⚠️ Attendance cannot be marked for future dates.
+          </div>
+        )}
 
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -280,6 +371,27 @@ export default function AttendancePage() {
                   </option>
                 ))}
               </select>
+
+              {isGrade11or12(grade) && (
+                <select
+                  value={selectedSubjectId}
+                  onChange={(e) => setSelectedSubjectId(e.target.value)}
+                  className="px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+                >
+                  <option value="">Select Subject</option>
+                  {allocatedSubjects.map((sm) => (
+                    <option key={sm.id} value={sm.subject_id}>
+                      {sm.subject_name} ({sm.subject_code})
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {isGrade11or12(grade) && allocatedSubjects.length === 0 && (
+                <span className="text-xs text-red-500 flex items-center gap-1 font-semibold self-center">
+                  ⚠️ No subjects allocated
+                </span>
+              )}
 
               <input
                 type="date"
@@ -380,8 +492,8 @@ export default function AttendancePage() {
                       <td className="px-6 py-4 text-center">
                         <button
                           onClick={() => toggleStatus(record.student_id, record.status)}
-                          disabled={session?.is_locked && userRole !== 'ADMIN'}
-                          className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${getStatusColor(record.status)} ${session?.is_locked && userRole !== 'ADMIN' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-md active:scale-95'}`}
+                          disabled={session?.is_locked || isFutureDate(date)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${getStatusColor(record.status)} ${session?.is_locked || isFutureDate(date) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-md active:scale-95'}`}
                         >
                           {getStatusIcon(record.status)}
                           {record.status}
@@ -394,7 +506,7 @@ export default function AttendancePage() {
                             placeholder="Add note..."
                             value={record.remarks || ''}
                             onChange={(e) => updateRemarks(record.student_id, e.target.value)}
-                            disabled={session?.is_locked && userRole !== 'ADMIN'}
+                            disabled={session?.is_locked || isFutureDate(date)}
                             className="text-xs bg-transparent border-b border-transparent focus:border-blue-400 outline-none w-full text-gray-600 placeholder-gray-300 disabled:opacity-50"
                           />
                         </td>
@@ -414,7 +526,11 @@ export default function AttendancePage() {
 
         {/* Floating Save Bar */}
         <div className="fixed bottom-6 right-6 flex gap-3">
-          {session?.is_locked ? (
+          {isFutureDate(date) ? (
+            <div className="bg-amber-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 font-bold opacity-75">
+              ⚠️ Future Date
+            </div>
+          ) : session?.is_locked ? (
             <div className="bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 font-bold">
               <Lock size={18} /> Register Locked
             </div>

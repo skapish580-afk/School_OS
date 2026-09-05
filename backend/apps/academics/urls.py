@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     GradeViewSet, SectionViewSet, SubjectViewSet, SubjectMappingViewSet,
     TimetableViewSet, PeriodViewSet, SyllabusViewSet, ChapterViewSet,
-    ExamViewSet, ResultViewSet, ReportCardViewSet
+    ExamViewSet, ResultViewSet, ReportCardViewSet, DirectEvaluationViewSet
 )
 from .views_exam_scheme import (
     ExamSchemeViewSet, ExamViewSet as SchemeExamViewSet, 
@@ -37,6 +37,7 @@ router.register(r'chapters', ChapterViewSet, basename='chapter')
 router.register(r'exams', ExamViewSet, basename='exam')
 router.register(r'results', ResultViewSet, basename='result')
 router.register(r'report-cards', ReportCardViewSet, basename='report-card')
+router.register(r'direct-evaluations', DirectEvaluationViewSet, basename='direct-evaluation')
 
 # NEW: Exam Scheme Management (Industry-standard blueprint system)
 router.register(r'exam-schemes', ExamSchemeViewSet, basename='exam-scheme')

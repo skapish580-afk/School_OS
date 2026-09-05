@@ -24,6 +24,7 @@ import {
   TransfersWidget,
   MedicalRecordsWidget,
 } from '@/components/DashboardWidgets';
+import { StudentDistanceMapWidget } from '@/components/StudentDistanceMapWidget';
 import { usePermissionContext } from '@/lib/rbac-context';
 import { useNotification } from '@/lib/NotificationContext';
 
@@ -70,6 +71,7 @@ interface CalendarEvent {
 // ============================================
 export default function PrincipalDashboard() {
   const { settings } = useSettings();
+  const { hasPermission, isAdmin } = usePermissionContext();
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'calendar' | 'notes' | 'notifications'>('overview');
@@ -91,16 +93,22 @@ export default function PrincipalDashboard() {
       {/* Tab Navigation */}
       <div className="flex gap-2 mb-6 bg-white p-1 rounded-xl shadow-sm w-fit">
         <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} icon={<Activity size={18} />} label="Overview" />
-        <TabButton active={activeTab === 'calendar'} onClick={() => setActiveTab('calendar')} icon={<Calendar size={18} />} label="Calendar" />
-        <TabButton active={activeTab === 'notes'} onClick={() => setActiveTab('notes')} icon={<StickyNote size={18} />} label="Notes" />
-        <TabButton active={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} icon={<Bell size={18} />} label="Notifications" />
+        {(isAdmin || hasPermission('dashboard.access_calendar')) && (
+          <TabButton active={activeTab === 'calendar'} onClick={() => setActiveTab('calendar')} icon={<Calendar size={18} />} label="Calendar" />
+        )}
+        {(isAdmin || hasPermission('dashboard.view_notes') || hasPermission('dashboard.manage_notes')) && (
+          <TabButton active={activeTab === 'notes'} onClick={() => setActiveTab('notes')} icon={<StickyNote size={18} />} label="Notes" />
+        )}
+        {(isAdmin || hasPermission('dashboard.view_notifications') || hasPermission('dashboard.notify_teachers') || hasPermission('dashboard.notify_students') || hasPermission('dashboard.notify_everyone')) && (
+          <TabButton active={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} icon={<Bell size={18} />} label="Notifications" />
+        )}
       </div>
 
       {/* Tab Content */}
       {activeTab === 'overview' && <OverviewTab stats={stats} settings={settings} />}
-      {activeTab === 'calendar' && <CalendarTab />}
-      {activeTab === 'notes' && <NotesTab />}
-      {activeTab === 'notifications' && <NotificationsTab />}
+      {activeTab === 'calendar' && (isAdmin || hasPermission('dashboard.access_calendar')) && <CalendarTab />}
+      {activeTab === 'notes' && (isAdmin || hasPermission('dashboard.view_notes') || hasPermission('dashboard.manage_notes')) && <NotesTab />}
+      {activeTab === 'notifications' && (isAdmin || hasPermission('dashboard.view_notifications') || hasPermission('dashboard.notify_teachers') || hasPermission('dashboard.notify_students') || hasPermission('dashboard.notify_everyone')) && <NotificationsTab />}
     </div>
   );
 }
@@ -172,6 +180,9 @@ function OverviewTab({ stats, settings }: { stats: any; settings: any }) {
 
           {/* Today's Attendance Widget */}
           {settings?.show_attendance_widget && <TodayAttendanceWidget />}
+
+          {/* Student Proximity Map Widget */}
+          {(isAdmin || hasModuleAccess('students')) && <StudentDistanceMapWidget />}
         </div>
 
         {/* Sidebar Widgets */}
@@ -233,8 +244,7 @@ function CalendarTab() {
   const [showAddModal, setShowAddModal] = useState<{ type: 'exam' | 'holiday' | 'event'; date: Date } | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const { showNotification } = useNotification();
-
-
+  const { hasPermission, isAdmin } = usePermissionContext();
 
   useEffect(() => {
     fetchCalendarData();
@@ -243,9 +253,9 @@ function CalendarTab() {
   const fetchCalendarData = async () => {
     try {
       const [examsRes, holidaysRes, eventsRes] = await Promise.all([
-        api.get('/academics/exams/'),
-        api.get('/schools/holidays/'),
-        api.get('/schools/events/')
+        api.get('/academics/exams/').catch(() => ({ data: [] })),
+        api.get('/schools/holidays/').catch(() => ({ data: [] })),
+        api.get('/schools/events/').catch(() => ({ data: [] }))
       ]);
 
       const calendarEvents: CalendarEvent[] = [
@@ -297,8 +307,13 @@ function CalendarTab() {
     return events.filter(e => e.date === dateStr);
   };
 
+  const canAddHoliday = isAdmin || hasPermission('calendar.manage_holiday');
+  const canAddEvent = isAdmin || hasPermission('calendar.manage_event');
+
   const handleContextMenu = (e: React.MouseEvent, day: number) => {
     e.preventDefault();
+    if (!canAddHoliday && !canAddEvent) return; // Only show context menu if write actions are permitted
+
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
     setContextMenu({ x: e.clientX, y: e.clientY, date });
   };
@@ -307,6 +322,22 @@ function CalendarTab() {
     if (contextMenu) {
       setShowAddModal({ type, date: contextMenu.date });
       setContextMenu(null);
+    }
+  };
+
+  const handleDeleteItem = async (id: string, type: 'holiday' | 'event') => {
+    if (!confirm(`Delete this ${type}?`)) return;
+    try {
+      if (type === 'holiday') {
+        await api.delete(`/schools/holidays/${id}/`);
+      } else if (type === 'event') {
+        await api.delete(`/schools/events/${id}/`);
+      }
+      showNotification(`${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully!`, 'success');
+      fetchCalendarData();
+    } catch (error) {
+      console.error('Failed to delete:', error);
+      showNotification('Failed to delete. Please try again.', 'error');
     }
   };
 
@@ -337,7 +368,9 @@ function CalendarTab() {
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-500"></div> Events</div>
       </div>
 
-      <p className="text-sm text-gray-500 mb-4 italic">💡 Right-click on any date to add an exam, holiday, or event</p>
+      {(canAddHoliday || canAddEvent) && (
+        <p className="text-sm text-gray-500 mb-4 italic">💡 Right-click on any date to add a holiday or event</p>
+      )}
 
       {/* Calendar Grid */}
       <div className="grid grid-cols-7 gap-1">
@@ -395,20 +428,35 @@ function CalendarTab() {
             {getEventsForDate(selectedDate.getDate()).length === 0 ? (
               <p className="text-sm text-gray-500 italic">No events scheduled for this day.</p>
             ) : (
-              getEventsForDate(selectedDate.getDate()).map((event, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full bg-${event.color}-500`}></div>
-                    <div>
-                      <p className="text-sm font-bold text-gray-900">{event.title}</p>
-                      {event.description && <p className="text-xs text-gray-500">{event.description}</p>}
+              getEventsForDate(selectedDate.getDate()).map((event, idx) => {
+                const canDeleteThis = (event.type === 'holiday' && (isAdmin || hasPermission('calendar.manage_holiday'))) ||
+                                      (event.type === 'event' && (isAdmin || hasPermission('calendar.manage_event')));
+                return (
+                  <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full bg-${event.color}-500`}></div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">{event.title}</p>
+                        {event.description && <p className="text-xs text-gray-500">{event.description}</p>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] font-bold uppercase px-2 py-1 bg-gray-100 rounded text-gray-500">
+                        {event.type}
+                      </span>
+                      {canDeleteThis && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteItem(event.id, event.type as 'holiday' | 'event'); }}
+                          className="p-1 hover:bg-red-50 text-red-500 hover:text-red-700 rounded transition-colors"
+                          title={`Delete ${event.type}`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <span className="text-[10px] font-bold uppercase px-2 py-1 bg-gray-100 rounded text-gray-500">
-                    {event.type}
-                  </span>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -425,12 +473,16 @@ function CalendarTab() {
             <button onClick={() => handleAddEvent('exam')} className="w-full px-4 py-2 text-left hover:bg-blue-50 flex items-center gap-2 text-sm">
               <GraduationCap size={16} className="text-blue-500" /> Add Exam
             </button>
-            <button onClick={() => handleAddEvent('holiday')} className="w-full px-4 py-2 text-left hover:bg-red-50 flex items-center gap-2 text-sm">
-              <Calendar size={16} className="text-red-500" /> Add Holiday
-            </button>
-            <button onClick={() => handleAddEvent('event')} className="w-full px-4 py-2 text-left hover:bg-green-50 flex items-center gap-2 text-sm">
-              <Star size={16} className="text-green-500" /> Add Event
-            </button>
+            {canAddHoliday && (
+              <button onClick={() => handleAddEvent('holiday')} className="w-full px-4 py-2 text-left hover:bg-red-50 flex items-center gap-2 text-sm">
+                <Calendar size={16} className="text-red-500" /> Add Holiday
+              </button>
+            )}
+            {canAddEvent && (
+              <button onClick={() => handleAddEvent('event')} className="w-full px-4 py-2 text-left hover:bg-green-50 flex items-center gap-2 text-sm">
+                <Star size={16} className="text-green-500" /> Add Event
+              </button>
+            )}
           </div>
         </>
       )}
@@ -555,7 +607,7 @@ function NotesTab() {
   const [showAddNote, setShowAddNote] = useState(false);
   const [loading, setLoading] = useState(true);
   const { showNotification } = useNotification();
-
+  const { hasPermission, isAdmin } = usePermissionContext();
 
   useEffect(() => {
     fetchNotes();
@@ -618,6 +670,8 @@ function NotesTab() {
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
+  const canManage = isAdmin || hasPermission('dashboard.manage_notes');
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -625,12 +679,14 @@ function NotesTab() {
           <StickyNote className="text-yellow-500" /> My Notes
         </h2>
 
-        <button
-          onClick={() => setShowAddNote(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          <Plus size={18} /> Add Note
-        </button>
+        {canManage && (
+          <button
+            onClick={() => setShowAddNote(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <Plus size={18} /> Add Note
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -638,7 +694,7 @@ function NotesTab() {
       ) : sortedNotes.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
           <StickyNote size={48} className="mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-500">No notes yet. Click "Add Note" to create one.</p>
+          <p className="text-gray-500">No notes yet. {canManage ? 'Click "Add Note" to create one.' : ''}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -652,17 +708,19 @@ function NotesTab() {
                   {note.is_pinned && <Pin size={14} className="text-blue-600" />}
                   {note.title}
                 </h4>
-                <div className="flex gap-1">
-                  <button onClick={() => handleTogglePin(note.id)} className="p-1 hover:bg-white/50 rounded" title="Toggle Pin">
-                    <Pin size={16} className={note.is_pinned ? 'text-blue-600 fill-blue-600' : 'text-gray-400'} />
-                  </button>
-                  <button onClick={() => handleToggleComplete(note.id)} className="p-1 hover:bg-white/50 rounded" title="Toggle Complete">
-                    <Check size={16} className={note.is_completed ? 'text-green-600' : 'text-gray-400'} />
-                  </button>
-                  <button onClick={() => handleDeleteNote(note.id)} className="p-1 hover:bg-white/50 rounded" title="Delete">
-                    <Trash2 size={16} className="text-red-400 hover:text-red-600" />
-                  </button>
-                </div>
+                {canManage && (
+                  <div className="flex gap-1">
+                    <button onClick={() => handleTogglePin(note.id)} className="p-1 hover:bg-white/50 rounded" title="Toggle Pin">
+                      <Pin size={16} className={note.is_pinned ? 'text-blue-600 fill-blue-600' : 'text-gray-400'} />
+                    </button>
+                    <button onClick={() => handleToggleComplete(note.id)} className="p-1 hover:bg-white/50 rounded" title="Toggle Complete">
+                      <Check size={16} className={note.is_completed ? 'text-green-600' : 'text-gray-400'} />
+                    </button>
+                    <button onClick={() => handleDeleteNote(note.id)} className="p-1 hover:bg-white/50 rounded" title="Delete">
+                      <Trash2 size={16} className="text-red-400 hover:text-red-600" />
+                    </button>
+                  </div>
+                )}
               </div>
               <p className="text-sm text-gray-700 whitespace-pre-wrap">{note.content}</p>
               {note.due_date && (
@@ -804,6 +862,7 @@ function NotificationsTab() {
   const [showSendModal, setShowSendModal] = useState(false);
   const [defaultAudience, setDefaultAudience] = useState('BOTH');
   const [loading, setLoading] = useState(true);
+  const { hasPermission, isAdmin } = usePermissionContext();
 
   useEffect(() => {
     fetchBroadcasts();
@@ -825,47 +884,69 @@ function NotificationsTab() {
     setShowSendModal(true);
   };
 
+  const canNotifyTeachers = isAdmin || hasPermission('dashboard.notify_teachers');
+  const canNotifyStudents = isAdmin || hasPermission('dashboard.notify_students');
+  const canNotifyEveryone = isAdmin || hasPermission('dashboard.notify_everyone');
+  const canSendAnyNotification = canNotifyTeachers || canNotifyStudents || canNotifyEveryone;
+
+  const getPreferredDefaultAudience = () => {
+    if (canNotifyEveryone) return 'BOTH';
+    if (canNotifyTeachers) return 'TEACHERS';
+    if (canNotifyStudents) return 'STUDENTS';
+    return 'BOTH';
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
           <Bell className="text-purple-500" /> Push Notifications
         </h2>
-        <button
-          onClick={() => openSendModal('BOTH')}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-        >
-          <Send size={18} /> Send Notification
-        </button>
+        {canSendAnyNotification && (
+          <button
+            onClick={() => openSendModal(getPreferredDefaultAudience())}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+          >
+            <Send size={18} /> Send Notification
+          </button>
+        )}
       </div>
 
       {/* Quick Send Buttons */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <button
-          onClick={() => openSendModal('TEACHERS')}
-          className="p-6 bg-blue-50 border-2 border-blue-200 rounded-xl text-left hover:bg-blue-100 transition-colors"
-        >
-          <UserCog size={24} className="text-blue-600 mb-3" />
-          <h4 className="font-semibold text-gray-900">Notify Teachers</h4>
-          <p className="text-sm text-gray-600">Send notification to all teachers</p>
-        </button>
-        <button
-          onClick={() => openSendModal('STUDENTS')}
-          className="p-6 bg-green-50 border-2 border-green-200 rounded-xl text-left hover:bg-green-100 transition-colors"
-        >
-          <GraduationCap size={24} className="text-green-600 mb-3" />
-          <h4 className="font-semibold text-gray-900">Notify Students</h4>
-          <p className="text-sm text-gray-600">Send notification to all students</p>
-        </button>
-        <button
-          onClick={() => openSendModal('BOTH')}
-          className="p-6 bg-purple-50 border-2 border-purple-200 rounded-xl text-left hover:bg-purple-100 transition-colors"
-        >
-          <Users2 size={24} className="text-purple-600 mb-3" />
-          <h4 className="font-semibold text-gray-900">Notify Everyone</h4>
-          <p className="text-sm text-gray-600">Send to teachers & students</p>
-        </button>
-      </div>
+      {canSendAnyNotification && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          {canNotifyTeachers && (
+            <button
+              onClick={() => openSendModal('TEACHERS')}
+              className="p-6 bg-blue-50 border-2 border-blue-200 rounded-xl text-left hover:bg-blue-100 transition-colors"
+            >
+              <UserCog size={24} className="text-blue-600 mb-3" />
+              <h4 className="font-semibold text-gray-900">Notify Teachers</h4>
+              <p className="text-sm text-gray-600">Send notification to all teachers</p>
+            </button>
+          )}
+          {canNotifyStudents && (
+            <button
+              onClick={() => openSendModal('STUDENTS')}
+              className="p-6 bg-green-50 border-2 border-green-200 rounded-xl text-left hover:bg-green-100 transition-colors"
+            >
+              <GraduationCap size={24} className="text-green-600 mb-3" />
+              <h4 className="font-semibold text-gray-900">Notify Students</h4>
+              <p className="text-sm text-gray-600">Send notification to all students</p>
+            </button>
+          )}
+          {canNotifyEveryone && (
+            <button
+              onClick={() => openSendModal('BOTH')}
+              className="p-6 bg-purple-50 border-2 border-purple-200 rounded-xl text-left hover:bg-purple-100 transition-colors"
+            >
+              <Users2 size={24} className="text-purple-600 mb-3" />
+              <h4 className="font-semibold text-gray-900">Notify Everyone</h4>
+              <p className="text-sm text-gray-600">Send to teachers & students</p>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Recent Broadcasts */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
@@ -881,37 +962,57 @@ function NotificationsTab() {
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {broadcasts.map(broadcast => (
-              <div key={broadcast.id} className="p-4 hover:bg-gray-50">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h4 className="font-medium text-gray-900">{broadcast.title}</h4>
-                    <p className="text-sm text-gray-600 mt-1">{broadcast.message}</p>
-                    <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${broadcast.audience === 'TEACHERS' ? 'bg-blue-100 text-blue-700' :
-                        broadcast.audience === 'STUDENTS' ? 'bg-green-100 text-green-700' :
-                          'bg-purple-100 text-purple-700'
+            {broadcasts.map(broadcast => {
+              const getPriorityStyle = (p: string) => {
+                switch (p) {
+                  case 'URGENT':
+                    return { border: 'border-l-4 border-red-500', dotBg: 'bg-red-500' };
+                  case 'HIGH':
+                    return { border: 'border-l-4 border-orange-500', dotBg: 'bg-orange-500' };
+                  case 'LOW':
+                    return { border: 'border-l-4 border-emerald-500', dotBg: 'bg-emerald-500' };
+                  case 'NORMAL':
+                  default:
+                    return { border: 'border-l-4 border-blue-500', dotBg: 'bg-blue-500' };
+                }
+              };
+              const style = getPriorityStyle(broadcast.priority);
+
+              return (
+                <div key={broadcast.id} className={`p-4 hover:bg-gray-50/80 ${style.border} transition-all`}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${style.dotBg} shrink-0`} />
+                        <h4 className="font-bold text-gray-900">{broadcast.title}</h4>
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1">{broadcast.message}</p>
+                      <div className="flex gap-4 mt-2.5 text-xs text-gray-500">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium ${broadcast.audience === 'TEACHERS' ? 'bg-blue-100 text-blue-700' :
+                          broadcast.audience === 'STUDENTS' ? 'bg-green-100 text-green-700' :
+                            'bg-purple-100 text-purple-700'
+                          }`}>
+                          <Users size={12} /> {broadcast.audience_display || broadcast.audience}
+                        </span>
+                        <span>{broadcast.recipients_count || 0} recipients</span>
+                        <span>{broadcast.read_count || 0} read</span>
+                      </div>
+                    </div>
+                    <div className="text-right ml-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${broadcast.status === 'SENT' ? 'bg-green-100 text-green-700' :
+                        broadcast.status === 'SCHEDULED' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-gray-100 text-gray-700'
                         }`}>
-                        <Users size={12} /> {broadcast.audience_display || broadcast.audience}
+                        {broadcast.status}
                       </span>
-                      <span>{broadcast.recipients_count || 0} recipients</span>
-                      <span>{broadcast.read_count || 0} read</span>
+                      <p className="text-xs text-gray-500 mt-1.5">
+                        {broadcast.sent_at ? new Date(broadcast.sent_at).toLocaleString() : new Date(broadcast.created_at).toLocaleString()}
+                      </p>
                     </div>
                   </div>
-                  <div className="text-right ml-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${broadcast.status === 'SENT' ? 'bg-green-100 text-green-700' :
-                      broadcast.status === 'SCHEDULED' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                      {broadcast.status}
-                    </span>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {broadcast.sent_at ? new Date(broadcast.sent_at).toLocaleString() : new Date(broadcast.created_at).toLocaleString()}
-                    </p>
-                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -932,11 +1033,29 @@ function NotificationsTab() {
 // SEND NOTIFICATION MODAL
 // ============================================
 function SendNotificationModal({ defaultAudience, onClose, onSuccess }: { defaultAudience: string; onClose: () => void; onSuccess: () => void }) {
+  const { hasPermission, isAdmin } = usePermissionContext();
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
-  const [audience, setAudience] = useState(defaultAudience);
   const [priority, setPriority] = useState('NORMAL');
   const [loading, setLoading] = useState(false);
+
+  // Filter allowed audience options dynamically based on permissions
+  const audienceOptions = [];
+  if (isAdmin || hasPermission('dashboard.notify_teachers')) {
+    audienceOptions.push({ value: 'TEACHERS', label: 'Teachers', icon: <UserCog size={16} />, color: 'blue' });
+  }
+  if (isAdmin || hasPermission('dashboard.notify_students')) {
+    audienceOptions.push({ value: 'STUDENTS', label: 'Students', icon: <GraduationCap size={16} />, color: 'green' });
+  }
+  if (isAdmin || hasPermission('dashboard.notify_everyone')) {
+    audienceOptions.push({ value: 'BOTH', label: 'Both', icon: <Users2 size={16} />, color: 'purple' });
+  }
+
+  // Fallback if the requested defaultAudience is not allowed for the user
+  const isDefaultAllowed = audienceOptions.some(opt => opt.value === defaultAudience);
+  const initialAudience = isDefaultAllowed ? defaultAudience : (audienceOptions[0]?.value || 'BOTH');
+
+  const [audience, setAudience] = useState(initialAudience);
 
   const handleSubmit = async () => {
     if (!title.trim() || !message.trim()) return;
@@ -974,11 +1093,7 @@ function SendNotificationModal({ defaultAudience, onClose, onSuccess }: { defaul
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Audience</label>
             <div className="grid grid-cols-3 gap-2">
-              {[
-                { value: 'TEACHERS', label: 'Teachers', icon: <UserCog size={16} />, color: 'blue' },
-                { value: 'STUDENTS', label: 'Students', icon: <GraduationCap size={16} />, color: 'green' },
-                { value: 'BOTH', label: 'Both', icon: <Users2 size={16} />, color: 'purple' }
-              ].map(opt => (
+              {audienceOptions.map(opt => (
                 <button
                   key={opt.value}
                   onClick={() => setAudience(opt.value)}

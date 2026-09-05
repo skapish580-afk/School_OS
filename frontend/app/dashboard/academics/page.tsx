@@ -27,17 +27,23 @@ export default function AcademicsPage() {
       try {
         // Fetch statistics for the dashboard
         const [gradesRes, sectionsRes, subjectsRes, examsRes] = await Promise.all([
-          api.get('/academics/grades/'),
-          api.get('/academics/sections/'),
-          api.get('/academics/subjects/'),
-          api.get('/academics/exams/')
+          api.get('/academics/grades/').catch(() => ({ data: [] })),
+          api.get('/academics/sections/').catch(() => ({ data: [] })),
+          api.get('/academics/subjects/').catch(() => ({ data: [] })),
+          api.get('/academics/exams/').catch(() => ({ data: [] }))
         ]);
 
+        const getLength = (res: any) => {
+          const data = res?.data;
+          if (!data) return 0;
+          return Array.isArray(data) ? data.length : (data.results?.length || 0);
+        };
+
         setStats({
-          total_grades: gradesRes.data.length,
-          total_sections: sectionsRes.data.length,
-          total_subjects: subjectsRes.data.length,
-          active_exams: examsRes.data.length,
+          total_grades: getLength(gradesRes),
+          total_sections: getLength(sectionsRes),
+          total_subjects: getLength(subjectsRes),
+          active_exams: getLength(examsRes),
           total_students: 0 // Will be calculated from enrollments
         });
       } catch (error) {
@@ -56,49 +62,56 @@ export default function AcademicsPage() {
       title: 'Classes & Sections',
       description: 'Manage grades, sections, and class hierarchies',
       path: '/dashboard/academics/classes',
-      color: 'bg-blue-50 border-blue-200'
+      color: 'bg-blue-50 border-blue-200',
+      permission: 'academics.view_class'
     },
     {
       icon: <BookOpen size={32} className="text-purple-600" />,
       title: 'Subjects',
       description: 'Define and manage subjects with code mappings',
       path: '/dashboard/academics/subjects',
-      color: 'bg-purple-50 border-purple-200'
+      color: 'bg-purple-50 border-purple-200',
+      permission: 'academics.view_subjects'
     },
     {
       icon: <Calendar size={32} className="text-green-600" />,
       title: 'Timetable',
       description: 'Create and manage class schedules and periods',
       path: '/dashboard/academics/timetable',
-      color: 'bg-green-50 border-green-200'
+      color: 'bg-green-50 border-green-200',
+      permission: 'academics.view_timetable'
     },
     {
       icon: <BookMarked size={32} className="text-orange-600" />,
       title: 'Syllabus',
       description: 'Track chapter progress and academic planning',
       path: '/dashboard/academics/syllabus',
-      color: 'bg-orange-50 border-orange-200'
+      color: 'bg-orange-50 border-orange-200',
+      permission: 'academics.view_syllabus'
     },
     {
       icon: <BarChart3 size={32} className="text-blue-600" />,
       title: 'Exams',
       description: 'Create exams for grades - auto-applies to all sections',
       path: '/dashboard/academics/exams',
-      color: 'bg-blue-50 border-blue-200'
+      color: 'bg-blue-50 border-blue-200',
+      permission: 'academics.view_exam'
     },
     {
       icon: <FileText size={32} className="text-indigo-600" />,
       title: 'Results',
       description: 'Record marks and generate report cards',
       path: '/dashboard/academics/results',
-      color: 'bg-indigo-50 border-indigo-200'
+      color: 'bg-indigo-50 border-indigo-200',
+      permission: 'academics.view_results'
     },
     {
       icon: <PenTool size={32} className="text-cyan-600" />,
       title: 'Marks Entry',
       description: 'Enter and manage student exam marks',
       path: '/dashboard/academics/marks-entry',
-      color: 'bg-cyan-50 border-cyan-200'
+      color: 'bg-cyan-50 border-cyan-200',
+      permission: 'academics.view_marks_entry'
     }
   ];
 
@@ -133,12 +146,22 @@ export default function AcademicsPage() {
 
       {/* Academic Modules Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {academicModules.map((module, index) => (
-          <Link
-            key={index}
-            href={module.path}
-            className={`border-2 ${module.color} p-6 rounded-xl hover:shadow-lg hover:scale-105 transition-all duration-200 cursor-pointer group`}
-          >
+        {academicModules
+          .filter(module => {
+            if (module.title === 'Subjects') {
+              return isAdmin || hasPermission('academics.view_subject') || hasPermission('academics.view_subject_allocation');
+            }
+            if (module.title === 'Timetable') {
+              return isAdmin || hasPermission('academics.add_timetable');
+            }
+            return !module.permission || isAdmin || hasPermission(module.permission);
+          })
+          .map((module, index) => (
+            <Link
+              key={index}
+              href={module.path}
+              className={`border-2 ${module.color} p-6 rounded-xl hover:shadow-lg hover:scale-105 transition-all duration-200 cursor-pointer group`}
+            >
             <div className="flex items-start justify-between mb-4">
               <div>{module.icon}</div>
               <ArrowRight size={20} className="text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />

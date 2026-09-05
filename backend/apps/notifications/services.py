@@ -216,6 +216,14 @@ class NotificationService:
         delivery_status = {}
         errors = []
         
+        # Get school settings for master notification toggles
+        school = template.school
+        from apps.schools.models_settings import SchoolSettings
+        school_settings = SchoolSettings.objects.filter(school=school).first()
+        
+        email_enabled = getattr(school_settings, 'email_notifications', True)
+        sms_enabled = getattr(school_settings, 'sms_notifications', False)
+        
         # Determine which channels to use
         enabled_channels = contact.preferred_channels or ['email', 'sms']
         if not isinstance(enabled_channels, list):
@@ -223,34 +231,44 @@ class NotificationService:
         
         # SMS Channel
         if 'sms' in enabled_channels and contact.phone_number and template.channels.get('sms', False):
-            try:
-                success = ChannelService.send_sms(
-                    phone=contact.get_full_phone(),
-                    message=log.message
-                )
-                channels_sent['sms'] = success
-                delivery_status['sms'] = 'delivered' if success else 'failed'
-            except Exception as e:
+            if not sms_enabled:
+                logger.info(f"SMS notifications are globally disabled for school {school.name}. Skipping SMS.")
                 channels_sent['sms'] = False
-                delivery_status['sms'] = 'failed'
-                errors.append(f"SMS: {str(e)}")
-                logger.error(f"SMS send failed: {e}")
+                delivery_status['sms'] = 'disabled_globally'
+            else:
+                try:
+                    success = ChannelService.send_sms(
+                        phone=contact.get_full_phone(),
+                        message=log.message
+                    )
+                    channels_sent['sms'] = success
+                    delivery_status['sms'] = 'delivered' if success else 'failed'
+                except Exception as e:
+                    channels_sent['sms'] = False
+                    delivery_status['sms'] = 'failed'
+                    errors.append(f"SMS: {str(e)}")
+                    logger.error(f"SMS send failed: {e}")
         
         # Email Channel
         if 'email' in enabled_channels and contact.email and template.channels.get('email', False):
-            try:
-                success = ChannelService.send_email(
-                    email=contact.email,
-                    subject=log.subject,
-                    message=log.message
-                )
-                channels_sent['email'] = success
-                delivery_status['email'] = 'sent' if success else 'failed'
-            except Exception as e:
+            if not email_enabled:
+                logger.info(f"Email notifications are globally disabled for school {school.name}. Skipping email.")
                 channels_sent['email'] = False
-                delivery_status['email'] = 'failed'
-                errors.append(f"Email: {str(e)}")
-                logger.error(f"Email send failed: {e}")
+                delivery_status['email'] = 'disabled_globally'
+            else:
+                try:
+                    success = ChannelService.send_email(
+                        email=contact.email,
+                        subject=log.subject,
+                        message=log.message
+                    )
+                    channels_sent['email'] = success
+                    delivery_status['email'] = 'sent' if success else 'failed'
+                except Exception as e:
+                    channels_sent['email'] = False
+                    delivery_status['email'] = 'failed'
+                    errors.append(f"Email: {str(e)}")
+                    logger.error(f"Email send failed: {e}")
         
         # WhatsApp Channel
         if 'whatsapp' in enabled_channels and contact.whatsapp_enabled and template.channels.get('whatsapp', False):

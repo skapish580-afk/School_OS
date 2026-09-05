@@ -1,17 +1,71 @@
 from rest_framework import serializers
 from .models import Achievement, StudentArtifact, StudentYearlyAward
 
+from apps.enrollments.models import StudentEnrollment
+
 class AchievementSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.student.user.full_name', read_only=True)
     student_suid = serializers.CharField(source='student.student.suid', read_only=True)
     current_class = serializers.SerializerMethodField()
+    
+    # Allow student and title to be not required/custom resolved in to_internal_value
+    student = serializers.PrimaryKeyRelatedField(queryset=StudentEnrollment.objects.all(), required=False)
+    title = serializers.CharField(required=False, allow_blank=True)
+    date_awarded = serializers.DateField(required=False)
     
     class Meta:
         model = Achievement
         fields = '__all__'
     
     def get_current_class(self, obj):
-        return f"{obj.student.grade}-{obj.student.section}"
+        if obj.student:
+            return f"{obj.student.grade}-{obj.student.section}"
+        return "Unassigned"
+
+    def to_internal_value(self, data):
+        # QueryDict is immutable, copy it if needed
+        if hasattr(data, 'copy'):
+            data = data.copy()
+            
+        student_id = data.get('student')
+        if student_id:
+            # Check if this is a Student ID instead of a StudentEnrollment ID
+            from django.core.exceptions import ValidationError
+            is_enrollment = False
+            try:
+                if StudentEnrollment.objects.filter(id=student_id).exists():
+                    is_enrollment = True
+            except (ValidationError, ValueError):
+                pass
+
+            if not is_enrollment:
+                try:
+                    # Find the active StudentEnrollment for this Student ID
+                    enrollment = StudentEnrollment.objects.filter(student_id=student_id, status='ACTIVE').first()
+                    if not enrollment:
+                        enrollment = StudentEnrollment.objects.filter(student_id=student_id).first()
+                    if enrollment:
+                        data['student'] = str(enrollment.id)
+                except (ValidationError, ValueError):
+                    pass
+        
+        # Normalize category
+        if 'category' in data:
+            category_val = str(data['category']).upper().replace('-', '_')
+            if category_val in ['CURRICULAR', 'NON_CURRICULAR', 'EXTRA_CURRICULAR']:
+                data['category'] = category_val
+
+        # Auto-populate date_awarded if missing
+        if not data.get('date_awarded'):
+            from django.utils import timezone
+            data['date_awarded'] = str(timezone.now().date())
+            
+        # Auto-populate title if missing
+        if not data.get('title'):
+            category = data.get('category', 'OTHER')
+            data['title'] = f"{category.replace('_', ' ').capitalize()} Achievement"
+            
+        return super().to_internal_value(data)
 
 
 class StudentYearlyAwardSerializer(serializers.ModelSerializer):

@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import axios from 'axios';
+import api from '@/lib/api';
 import { 
   Clock, AlertCircle, CheckCircle, BookOpen, Users, 
   ClipboardCheck, TrendingUp, Calendar, Bell, ChevronLeft,
-  ChevronRight, X, Check
+  ChevronRight, X, Check, Plus, Lock
 } from 'lucide-react';
 
 interface ClassSession {
@@ -19,13 +19,8 @@ interface ClassSession {
   end_time: string;
   attendance_marked: boolean;
   student_count: number;
-}
-
-interface Alert {
-  id: string;
-  type: 'health' | 'discipline' | 'admin';
-  message: string;
-  priority: 'high' | 'medium' | 'low';
+  room?: string;
+  day?: string;
 }
 
 interface CalendarEvent {
@@ -33,6 +28,7 @@ interface CalendarEvent {
   title: string;
   date: string;
   type: 'exam' | 'holiday' | 'event';
+  description?: string;
 }
 
 interface Notification {
@@ -45,10 +41,16 @@ interface Notification {
   is_read: boolean;
 }
 
+interface SubjectMappingOption {
+  id: string;
+  section_id: string;
+  section_name: string;
+  subject_name: string;
+}
+
 export default function TeacherDashboard() {
   const [loading, setLoading] = useState(true);
   const [todayClasses, setTodayClasses] = useState<ClassSession[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [stats, setStats] = useState({
     classesToday: 0,
     pendingAttendance: 0,
@@ -61,54 +63,78 @@ export default function TeacherDashboard() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
+  // Exam Creation Modal States for Unit Test
+  const [showAddExamModal, setShowAddExamModal] = useState(false);
+  const [submittingExam, setSubmittingExam] = useState(false);
+  const [examError, setExamError] = useState('');
+  const [subjectMappings, setSubjectMappings] = useState<SubjectMappingOption[]>([]);
+  const [examFormData, setExamFormData] = useState({
+    name: '',
+    date: '',
+    mapping_id: '',
+    max_marks: '50',
+    passing_marks: '20',
+    duration: '60',
+    academic_year: '2025-2026'
+  });
+
   useEffect(() => {
     fetchDashboardData();
     fetchNotifications();
     fetchCalendarData();
+    fetchSubjectMappings();
   }, []);
 
   const fetchDashboardData = async () => {
     try {
-      const token = localStorage.getItem('access_token');
-      
-      const response = await axios.get(
-        'http://localhost:8000/api/v1/teachers/assignments/?is_active=true',
-        { headers: { Authorization: `Bearer ${token}` } }
+      let scheduleItems: any[] = [];
+      try {
+        const schedRes = await api.get('/academics/timetables/my_schedule/');
+        scheduleItems = Array.isArray(schedRes.data) ? schedRes.data : schedRes.data.results || [];
+      } catch (err) {
+        console.error('Failed to fetch my_schedule', err);
+      }
+
+      // 1. Detect which day of the week is today
+      const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const todayDate = new Date();
+      const todayDayName = daysOfWeek[todayDate.getDay()];
+      const todayDayCode = todayDayName.substring(0, 3).toUpperCase();
+
+      // 2. Filter classes scheduled for today
+      let todaySched = scheduleItems.filter((s: any) => 
+        (s.day && s.day.toLowerCase() === todayDayName.toLowerCase()) || 
+        (s.day_code && s.day_code.toUpperCase() === todayDayCode)
       );
-      
-      const classes = response.data.map((assignment: any, index: number) => ({
-        id: assignment.id.toString(),
-        subject: assignment.subject || assignment.role,
-        grade: assignment.grade,
-        section: assignment.section,
-        period: index + 1,
-        start_time: `${8 + index}:30`,
-        end_time: `${9 + index}:30`,
+
+      // Sort by period number to ensure sequential order
+      todaySched.sort((a: any, b: any) => (a.period || 0) - (b.period || 0));
+
+      // 3. Fetch the first period details of today from "My Classes"
+      const firstPeriodOfToday = todaySched.find((s: any) => s.period === 1) || todaySched[0];
+
+      const classes: ClassSession[] = firstPeriodOfToday ? [{
+        id: firstPeriodOfToday.id || '1',
+        subject: firstPeriodOfToday.subject,
+        grade: firstPeriodOfToday.grade,
+        section: firstPeriodOfToday.section,
+        period: firstPeriodOfToday.period || 1,
+        start_time: firstPeriodOfToday.start_time || '08:30',
+        end_time: firstPeriodOfToday.end_time || '09:30',
+        room: firstPeriodOfToday.room || '',
         attendance_marked: false,
-        student_count: assignment.student_count || 0
-      }));
+        student_count: firstPeriodOfToday.student_count || 0,
+        day: todayDayName
+      }] : [];
       
       setTodayClasses(classes);
 
-      setAlerts([
-        {
-          id: '1',
-          type: 'admin',
-          message: 'Monthly test marks submission deadline: Tomorrow',
-          priority: 'high'
-        },
-        {
-          id: '2',
-          type: 'health',
-          message: 'Student Rahul Kumar (9-A) has medical restriction',
-          priority: 'medium'
-        }
-      ]);
+      const totalStudentsToday = classes.reduce((acc: number, c: any) => acc + (c.student_count || 0), 0);
 
       setStats({
-        classesToday: classes.length || 3,
-        pendingAttendance: 2,
-        studentsToday: 120,
+        classesToday: classes.length,
+        pendingAttendance: classes.filter((c: any) => !c.attendance_marked).length,
+        studentsToday: totalStudentsToday,
         examsToday: 0
       });
     } catch (error) {
@@ -120,22 +146,12 @@ export default function TeacherDashboard() {
 
   const fetchNotifications = async () => {
     try {
-      const token = localStorage.getItem('access_token');
-      console.log('Fetching notifications with token:', token ? 'exists' : 'missing');
-      
       const [notifRes, countRes] = await Promise.all([
-        axios.get('http://localhost:8000/api/v1/schools/broadcasts/my_notifications/', {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        axios.get('http://localhost:8000/api/v1/schools/broadcasts/unread_count/', {
-          headers: { Authorization: `Bearer ${token}` }
-        })
+        api.get('/schools/broadcasts/my_notifications/'),
+        api.get('/schools/broadcasts/unread_count/')
       ]);
       
-      console.log('Notifications response:', notifRes.data);
-      console.log('Unread count response:', countRes.data);
-      
-      setNotifications(notifRes.data || []);
+      setNotifications(Array.isArray(notifRes.data) ? notifRes.data : notifRes.data.results || []);
       setUnreadCount(countRes.data?.count || 0);
     } catch (error) {
       console.error('Failed to fetch notifications', error);
@@ -144,38 +160,41 @@ export default function TeacherDashboard() {
 
   const fetchCalendarData = async () => {
     try {
-      const token = localStorage.getItem('access_token');
       const [examsRes, holidaysRes, eventsRes] = await Promise.all([
-        axios.get('http://localhost:8000/api/v1/academics/exams/', {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        axios.get('http://localhost:8000/api/v1/schools/holidays/', {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        axios.get('http://localhost:8000/api/v1/schools/events/', {
-          headers: { Authorization: `Bearer ${token}` }
-        })
+        api.get('/academics/exams/').catch(() => ({ data: [] })),
+        api.get('/schools/holidays/').catch(() => ({ data: [] })),
+        api.get('/schools/events/').catch(() => ({ data: [] }))
       ]);
 
+      const examsList = Array.isArray(examsRes.data) ? examsRes.data : examsRes.data.results || [];
+      const holidaysList = Array.isArray(holidaysRes.data) ? holidaysRes.data : holidaysRes.data.results || [];
+      const eventsList = Array.isArray(eventsRes.data) ? eventsRes.data : eventsRes.data.results || [];
+
+      const mappedExams = examsList.map((e: any) => ({
+        id: e.id ? e.id.toString() : `exam-${Math.random()}`,
+        title: e.name || e.title || 'Exam',
+        date: e.exam_date || e.start_date || e.date,
+        type: 'exam' as const
+      })).filter((e: any) => !!e.date);
+
+      const mappedHolidays = holidaysList.map((h: any) => ({
+        id: h.id ? h.id.toString() : `holiday-${Math.random()}`,
+        title: h.name || h.title || 'Holiday',
+        date: h.date || h.start_date,
+        type: 'holiday' as const
+      })).filter((h: any) => !!h.date);
+
+      const mappedEvents = eventsList.map((ev: any) => ({
+        id: ev.id ? ev.id.toString() : `event-${Math.random()}`,
+        title: ev.title || ev.name || 'School Event',
+        date: ev.event_date || ev.start_date || ev.date,
+        type: 'event' as const
+      })).filter((ev: any) => !!ev.date);
+
       const events: CalendarEvent[] = [
-        ...(examsRes.data?.results || examsRes.data || []).map((e: any) => ({
-          id: e.id,
-          title: e.name,
-          date: e.exam_date,
-          type: 'exam' as const
-        })),
-        ...(holidaysRes.data?.results || holidaysRes.data || []).map((h: any) => ({
-          id: h.id,
-          title: h.name,
-          date: h.date,
-          type: 'holiday' as const
-        })),
-        ...(eventsRes.data?.results || eventsRes.data || []).map((ev: any) => ({
-          id: ev.id,
-          title: ev.title,
-          date: ev.event_date,
-          type: 'event' as const
-        }))
+        ...mappedExams,
+        ...mappedHolidays,
+        ...mappedEvents
       ];
       setCalendarEvents(events);
     } catch (error) {
@@ -183,14 +202,65 @@ export default function TeacherDashboard() {
     }
   };
 
+  const fetchSubjectMappings = async () => {
+    try {
+      const res = await api.get('/academics/subject-mappings/my_assignments/');
+      const list = Array.isArray(res.data) ? res.data : res.data.results || [];
+      const options: SubjectMappingOption[] = list.map((m: any) => ({
+        id: m.id,
+        section_id: m.section_id,
+        section_name: m.section_name,
+        subject_name: m.subject_name
+      }));
+      setSubjectMappings(options);
+    } catch (err) {
+      console.error('Failed to load subject mappings for exam creation', err);
+    }
+  };
+
+  const handleCreateExam = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmittingExam(true);
+    setExamError('');
+
+    const selectedMapping = subjectMappings.find(m => m.id === examFormData.mapping_id);
+    if (!selectedMapping) {
+      setExamError('Please select a valid subject and grade-section.');
+      setSubmittingExam(false);
+      return;
+    }
+
+    try {
+      await api.post('/academics/exams/', {
+        name: examFormData.name,
+        exam_type: 'UNIT_TEST',
+        section_id: selectedMapping.section_id,
+        subject_mapping_id: selectedMapping.id,
+        exam_date: examFormData.date,
+        duration_minutes: parseInt(examFormData.duration, 10) || 60,
+        max_marks: parseInt(examFormData.max_marks, 10) || 50,
+        passing_marks: parseInt(examFormData.passing_marks, 10) || 20,
+        academic_year: examFormData.academic_year || '2025-2026'
+      });
+
+      setShowAddExamModal(false);
+      fetchCalendarData();
+    } catch (err: any) {
+      const errData = err.response?.data;
+      if (errData) {
+        const errorMsgs = typeof errData === 'string' ? errData : Object.values(errData).flat().join(', ');
+        setExamError(errorMsgs || 'Failed to create unit test exam');
+      } else {
+        setExamError('Failed to create unit test exam');
+      }
+    } finally {
+      setSubmittingExam(false);
+    }
+  };
+
   const markAsRead = async (notificationId: string) => {
     try {
-      const token = localStorage.getItem('access_token');
-      await axios.post(
-        `http://localhost:8000/api/v1/schools/broadcasts/${notificationId}/mark_read/`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await api.post(`/schools/broadcasts/${notificationId}/mark_read/`, {});
       fetchNotifications();
     } catch (error) {
       console.error('Failed to mark as read', error);
@@ -343,93 +413,74 @@ export default function TeacherDashboard() {
 
       {/* Tab Content */}
       {activeTab === 'schedule' && (
-        <>
-          {/* Alerts */}
-          {alerts.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-red-600" />
-                Important Alerts
-              </h3>
-              <div className="space-y-3">
-                {alerts.map(alert => (
-                  <div
-                    key={alert.id}
-                    className={`p-4 rounded-lg border-l-4 ${
-                      alert.priority === 'high' ? 'bg-red-50 border-red-600' :
-                      alert.priority === 'medium' ? 'bg-yellow-50 border-yellow-600' :
-                      'bg-blue-50 border-blue-600'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <AlertCircle size={18} className={
-                        alert.priority === 'high' ? 'text-red-600' :
-                        alert.priority === 'medium' ? 'text-yellow-600' :
-                        'text-blue-600'
-                      } />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{alert.message}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Today's Schedule */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold mb-4">Today's Schedule</h3>
-            <div className="space-y-3">
-              {todayClasses.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">No classes scheduled for today</p>
-              ) : (
-                todayClasses.map(cls => (
-                  <div
-                    key={cls.id}
-                    className={`p-4 rounded-lg border ${
-                      cls.id === currentClass?.id ? 'border-green-600 bg-green-50' : 'border-gray-200'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-2 h-2 rounded-full ${
-                            cls.attendance_marked ? 'bg-green-600' : 'bg-orange-400'
-                          }`} />
-                          <div>
-                            <div className="font-semibold text-gray-900">
-                              Period {cls.period} • {cls.subject}
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              Grade {cls.grade}{cls.section} • {cls.student_count} students • {cls.start_time} - {cls.end_time}
-                            </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Today's Schedule</h3>
+            {todayClasses.length > 0 && todayClasses[0].day && (
+              <span className="text-sm font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+                {todayClasses[0].day}
+              </span>
+            )}
+          </div>
+          <div className="space-y-3">
+            {todayClasses.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">No classes scheduled for today in My Classes module</p>
+            ) : (
+              todayClasses.map(cls => (
+                <div
+                  key={cls.id}
+                  className={`p-4 rounded-lg border ${
+                    cls.id === currentClass?.id ? 'border-green-600 bg-green-50' : 'border-gray-200 bg-gray-50/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2.5 h-2.5 rounded-full ${
+                          cls.attendance_marked ? 'bg-green-600' : 'bg-orange-400'
+                        }`} />
+                        <div>
+                          <div className="font-bold text-gray-900 text-base">
+                            Period {cls.period} • <span className="text-blue-700">{cls.subject}</span>
+                          </div>
+                          <div className="text-sm text-gray-600 mt-1 font-medium flex flex-wrap items-center gap-3">
+                            <span>Grade {cls.grade}{cls.section}</span>
+                            <span>•</span>
+                            <span className="text-green-700 font-bold">{cls.student_count} students</span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1"><Clock size={14} /> {cls.start_time} - {cls.end_time}</span>
+                            {cls.room && (
+                              <>
+                                <span>•</span>
+                                <span className="text-gray-500">Room: {cls.room}</span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
-                      
-                      <div className="flex items-center gap-3">
-                        {cls.attendance_marked ? (
-                          <span className="flex items-center gap-1 text-green-600 text-sm font-medium">
-                            <CheckCircle size={16} />
-                            Marked
-                          </span>
-                        ) : (
-                          <Link
-                            href={`/teachers/attendance?class=${cls.id}`}
-                            className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-                          >
-                            Mark Attendance →
-                          </Link>
-                        )}
-                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      {cls.attendance_marked ? (
+                        <span className="flex items-center gap-1 text-green-600 text-sm font-medium">
+                          <CheckCircle size={16} />
+                          Marked
+                        </span>
+                      ) : (
+                        <Link
+                          href={`/teachers/attendance?class=${cls.id}`}
+                          className="text-blue-600 hover:text-blue-700 text-sm font-semibold hover:underline"
+                        >
+                          Mark Attendance →
+                        </Link>
+                      )}
                     </div>
                   </div>
-                ))
-              )}
-            </div>
+                </div>
+              ))
+            )}
           </div>
-        </>
+        </div>
       )}
 
       {activeTab === 'calendar' && (
@@ -439,19 +490,40 @@ export default function TeacherDashboard() {
               <Calendar className="text-blue-500" /> School Calendar
             </h3>
             <div className="flex items-center gap-4">
-              <button 
-                onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))} 
-                className="p-2 hover:bg-gray-100 rounded-lg"
+              <button
+                onClick={() => {
+                  setExamFormData({
+                    name: '',
+                    date: `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`,
+                    mapping_id: '',
+                    max_marks: '50',
+                    passing_marks: '20',
+                    duration: '60',
+                    academic_year: '2025-2026'
+                  });
+                  setExamError('');
+                  setShowAddExamModal(true);
+                }}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors shadow-xs"
               >
-                <ChevronLeft size={20} />
+                <Plus size={16} />
+                Add Unit Test
               </button>
-              <span className="font-semibold text-lg">{monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}</span>
-              <button 
-                onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))} 
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <ChevronRight size={20} />
-              </button>
+              <div className="flex items-center gap-2 border border-gray-200 rounded-lg p-1">
+                <button 
+                  onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))} 
+                  className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <span className="font-semibold text-sm px-2">{monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}</span>
+                <button 
+                  onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))} 
+                  className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -476,11 +548,25 @@ export default function TeacherDashboard() {
               const day = i + 1;
               const dayEvents = getEventsForDate(day);
               const isToday = new Date().toDateString() === new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day).toDateString();
+              const dateStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
               
               return (
                 <div
                   key={day}
-                  className={`p-2 min-h-[80px] border rounded-lg ${
+                  onClick={() => {
+                    setExamFormData({
+                      name: '',
+                      date: dateStr,
+                      mapping_id: '',
+                      max_marks: '50',
+                      passing_marks: '20',
+                      duration: '60',
+                      academic_year: '2025-2026'
+                    });
+                    setExamError('');
+                    setShowAddExamModal(true);
+                  }}
+                  className={`p-2 min-h-[80px] border rounded-lg cursor-pointer hover:border-blue-400 hover:shadow-xs transition-all ${
                     isToday ? 'bg-blue-50 border-blue-300' : 'border-gray-100'
                   }`}
                 >
@@ -489,17 +575,17 @@ export default function TeacherDashboard() {
                     {dayEvents.slice(0, 2).map(event => (
                       <div
                         key={event.id}
-                        className={`text-xs px-1.5 py-0.5 rounded truncate ${
-                          event.type === 'exam' ? 'bg-blue-100 text-blue-700' :
-                          event.type === 'holiday' ? 'bg-red-100 text-red-700' :
-                          'bg-green-100 text-green-700'
+                        className={`text-xs px-1.5 py-0.5 rounded truncate font-medium ${
+                          event.type === 'exam' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                          event.type === 'holiday' ? 'bg-red-100 text-red-700 border border-red-200' :
+                          'bg-green-100 text-green-700 border border-green-200'
                         }`}
                       >
                         {event.title}
                       </div>
                     ))}
                     {dayEvents.length > 2 && (
-                      <div className="text-xs text-gray-500">+{dayEvents.length - 2} more</div>
+                      <div className="text-xs text-gray-500 font-medium">+{dayEvents.length - 2} more</div>
                     )}
                   </div>
                 </div>
@@ -526,7 +612,7 @@ export default function TeacherDashboard() {
                       <p className="font-medium text-gray-900">{event.title}</p>
                       <p className="text-sm text-gray-500">{new Date(event.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
+                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
                       event.type === 'exam' ? 'bg-blue-100 text-blue-700' :
                       event.type === 'holiday' ? 'bg-red-100 text-red-700' :
                       'bg-green-100 text-green-700'
@@ -557,48 +643,187 @@ export default function TeacherDashboard() {
             </div>
           ) : (
             <div className="space-y-3">
-              {notifications.map(notif => (
-                <div
-                  key={notif.id}
-                  className={`p-4 rounded-lg border-l-4 ${
-                    !notif.is_read ? 'bg-blue-50 border-blue-500' : 'bg-gray-50 border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-semibold text-gray-900">{notif.title}</h4>
-                        {!notif.is_read && (
-                          <span className="px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">New</span>
-                        )}
-                        <span className={`px-2 py-0.5 text-xs rounded-full ${
-                          notif.priority === 'URGENT' ? 'bg-red-100 text-red-700' :
-                          notif.priority === 'HIGH' ? 'bg-orange-100 text-orange-700' :
-                          notif.priority === 'NORMAL' ? 'bg-gray-100 text-gray-700' :
-                          'bg-gray-100 text-gray-500'
-                        }`}>
-                          {notif.priority}
-                        </span>
+              {notifications.map(notif => {
+                const getPriorityStyle = (p: string) => {
+                  switch (p) {
+                    case 'URGENT':
+                      return { border: 'border-l-4 border-red-500', dotBg: 'bg-red-500', bg: notif.is_read ? 'bg-slate-50' : 'bg-red-50/30' };
+                    case 'HIGH':
+                      return { border: 'border-l-4 border-orange-500', dotBg: 'bg-orange-500', bg: notif.is_read ? 'bg-slate-50' : 'bg-orange-50/30' };
+                    case 'LOW':
+                      return { border: 'border-l-4 border-emerald-500', dotBg: 'bg-emerald-500', bg: notif.is_read ? 'bg-slate-50' : 'bg-emerald-50/30' };
+                    case 'NORMAL':
+                    default:
+                      return { border: 'border-l-4 border-blue-500', dotBg: 'bg-blue-500', bg: notif.is_read ? 'bg-slate-50' : 'bg-blue-50/30' };
+                  }
+                };
+                const style = getPriorityStyle(notif.priority);
+
+                return (
+                  <div
+                    key={notif.id}
+                    className={`p-4 rounded-xl shadow-sm border border-slate-100 ${style.border} ${style.bg} transition-all`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className={`w-2.5 h-2.5 rounded-full ${style.dotBg} shrink-0`} />
+                          <h4 className="font-bold text-slate-900 text-base">{notif.title}</h4>
+                          {!notif.is_read && (
+                            <span className="px-2 py-0.5 bg-blue-600 text-white text-[10px] font-extrabold tracking-wide uppercase rounded-full">New</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-700 leading-relaxed">{notif.message}</p>
+                        <p className="text-xs text-slate-400 font-medium mt-2.5 flex items-center gap-1">
+                          <Clock size={12} />
+                          {notif.sent_at ? new Date(notif.sent_at).toLocaleString() : new Date(notif.created_at).toLocaleString()}
+                        </p>
                       </div>
-                      <p className="text-sm text-gray-700">{notif.message}</p>
-                      <p className="text-xs text-gray-500 mt-2">
-                        {notif.sent_at ? new Date(notif.sent_at).toLocaleString() : 'Just now'}
-                      </p>
+                      {!notif.is_read && (
+                        <button
+                          onClick={() => markAsRead(notif.id)}
+                          className="p-2 hover:bg-white rounded-lg text-blue-600 shadow-sm border border-slate-100 transition-all shrink-0"
+                          title="Mark as read"
+                        >
+                          <Check size={18} />
+                        </button>
+                      )}
                     </div>
-                    {!notif.is_read && (
-                      <button
-                        onClick={() => markAsRead(notif.id)}
-                        className="p-2 hover:bg-white rounded-lg text-blue-600"
-                        title="Mark as read"
-                      >
-                        <Check size={18} />
-                      </button>
-                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Add Unit Test Modal */}
+      {showAddExamModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-100">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <Calendar size={18} />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Schedule Unit Test</h3>
+              </div>
+              <button
+                onClick={() => setShowAddExamModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
+              <div className="flex items-center gap-2 text-blue-900 text-sm font-semibold">
+                <Lock size={16} className="text-blue-600" />
+                <span>Exam Type:</span>
+              </div>
+              <span className="bg-blue-600 text-white text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide">
+                Unit Test Only
+              </span>
+            </div>
+
+            {examError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm font-medium">
+                {examError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateExam} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Subject & Class*
+                </label>
+                <select
+                  value={examFormData.mapping_id}
+                  onChange={(e) => setExamFormData(prev => ({ ...prev, mapping_id: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-sm"
+                  required
+                >
+                  <option value="">-- Select Subject & Class --</option>
+                  {subjectMappings.map(sm => (
+                    <option key={sm.id} value={sm.id}>
+                      {sm.section_name} - {sm.subject_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Exam Title*
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Mathematics Unit Test 1"
+                  value={examFormData.name}
+                  onChange={(e) => setExamFormData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Exam Date*
+                </label>
+                <input
+                  type="date"
+                  value={examFormData.date}
+                  onChange={(e) => setExamFormData(prev => ({ ...prev, date: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Max Marks*
+                  </label>
+                  <input
+                    type="number"
+                    value={examFormData.max_marks}
+                    onChange={(e) => setExamFormData(prev => ({ ...prev, max_marks: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Pass Marks*
+                  </label>
+                  <input
+                    type="number"
+                    value={examFormData.passing_marks}
+                    onChange={(e) => setExamFormData(prev => ({ ...prev, passing_marks: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddExamModal(false)}
+                  className="px-4 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 text-sm font-semibold transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingExam}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 flex items-center gap-2 shadow-sm"
+                >
+                  {submittingExam ? 'Saving...' : 'Schedule Unit Test'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

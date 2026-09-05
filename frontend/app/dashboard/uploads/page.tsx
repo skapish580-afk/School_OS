@@ -1,11 +1,15 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { UploadCloud, FileSpreadsheet, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, ChevronRight, User, FileText, Download, Info } from 'lucide-react';
+import { UploadCloud, FileSpreadsheet, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, ChevronRight, User, FileText, Download, Info, ShieldAlert } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api from '@/lib/api';
+import { usePermissionContext } from '@/lib/rbac-context';
 
 export default function DataUploadsPage() {
+  const { hasPermission, isAdmin } = usePermissionContext();
+  const canAccess = isAdmin || hasPermission('data_uploads.upload_data');
+
   const [activeTab, setActiveTab] = useState<'import' | 'certificate'>('import');
   const [importType, setImportType] = useState<'student' | 'teacher'>('student');
 
@@ -208,6 +212,18 @@ export default function DataUploadsPage() {
       setTimeout(() => setCertStatus('idle'), 3000);
     }
   };
+
+  if (!canAccess) {
+    return (
+      <div className="p-12 max-w-4xl mx-auto text-center space-y-4">
+        <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto">
+          <ShieldAlert size={32} />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900">Access Restricted</h2>
+        <p className="text-slate-500 text-sm">You do not have permission to access the Data Uploads module.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">

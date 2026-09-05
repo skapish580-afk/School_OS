@@ -28,15 +28,32 @@ class AcademicYearViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
     school_field = 'school'
     
     def get_queryset(self):
-        return super().get_queryset()
+        user = self.request.user
+        from apps.core.school_isolation import get_user_school
+        school = get_user_school(user)
+        
+        queryset = super().get_queryset()
+        
+        # Auto-seed academic years based on school settings if none exist
+        if school and not queryset.exists():
+            try:
+                from apps.schools.models_settings import sync_school_academic_years
+                sync_school_academic_years(school)
+            except Exception:
+                pass
+            # Re-evaluate queryset
+            queryset = super().get_queryset()
+            
+        return queryset
     
     @action(detail=False, methods=['post'])
     def seed_default_years(self, request):
-        """Quickly create 2025-2026 and 2026-2027 academic years"""
+        """Create academic years based on school's configured academic year settings"""
         school_id = request.data.get('school_id')
         
         from apps.schools.models import School
         from apps.core.school_isolation import get_user_school
+        from apps.schools.models_settings import sync_school_academic_years
         
         school = None
         if school_id:
@@ -53,38 +70,14 @@ class AcademicYearViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Create 2025-2026 (Current - Active)
-        year_2025, created1 = AcademicYear.objects.get_or_create(
-            school=school,
-            year_code='2025-2026',
-            defaults={
-                'start_date': date(2025, 4, 1),
-                'end_date': date(2026, 3, 31),
-                'status': 'ACTIVE'
-            }
-        )
+        # Sync academic years based on school's configured settings
+        sync_school_academic_years(school)
         
-        # Create 2026-2027 (Next - Upcoming)
-        year_2026, created2 = AcademicYear.objects.get_or_create(
-            school=school,
-            year_code='2026-2027',
-            defaults={
-                'start_date': date(2026, 4, 1),
-                'end_date': date(2027, 3, 31),
-                'status': 'UPCOMING'
-            }
-        )
+        years = AcademicYear.objects.filter(school=school).order_by('-year_code')
         
         return Response({
-            'message': 'Academic years created',
-            'created': {
-                '2025-2026': created1,
-                '2026-2027': created2
-            },
-            'years': [
-                AcademicYearSerializer(year_2025).data,
-                AcademicYearSerializer(year_2026).data
-            ]
+            'message': 'Academic years synced from school settings',
+            'years': AcademicYearSerializer(years, many=True).data
         })
     
     @action(detail=True, methods=['post'])

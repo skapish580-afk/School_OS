@@ -13,6 +13,8 @@ class Student(models.Model):
         ('PENDING_ALUMNI', 'Pending Alumni'),
         ('TRANSFERRED', 'Transferred'),
         ('SUSPENDED', 'Suspended'),
+        ('WITHDRAWN', 'Withdrawn'),
+        ('TEMPORARY', 'Temporary'),
     ]
     
     GENDER_CHOICES = [
@@ -60,10 +62,12 @@ class Student(models.Model):
     birth_place = models.CharField(max_length=100, null=True, blank=True)
     is_rte_student = models.BooleanField(default=False)
     fee_concession_applicable = models.BooleanField(default=False)
+    fee_concession_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, null=True, blank=True)
     house_color = models.CharField(max_length=50, null=True, blank=True)
     alumni_directory_consent = models.BooleanField(default=False)
     
     # --- GOVERNMENT IDENTIFIERS ---
+    aadhaar_number = models.CharField(max_length=12, null=True, blank=True)
     aadhaar_last_4_digits = models.CharField(max_length=4, null=True, blank=True)
     apaar_id = models.CharField(max_length=50, null=True, blank=True, help_text="National Level ID")
     pen_id = models.CharField(max_length=50, null=True, blank=True, help_text="State Level ID")
@@ -97,6 +101,12 @@ class Student(models.Model):
             return self.current_section.grade_config
         return self.grade_config
 
+    @property
+    def roll_number(self):
+        """Helper to get student's active enrollment roll number"""
+        enrollment = self.enrollments.filter(status='ACTIVE').first()
+        return enrollment.roll_number if enrollment else None
+
     admission_date = models.DateField(null=True, blank=True)
     graduation_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE')
@@ -109,6 +119,8 @@ class Student(models.Model):
         ordering = ['user__first_name', 'user__last_name']
 
     def save(self, *args, **kwargs):
+        if self.aadhaar_number and len(self.aadhaar_number) >= 4:
+            self.aadhaar_last_4_digits = self.aadhaar_number[-4:]
         if not self.suid:
             # Get school code if available
             school_code = None
@@ -201,6 +213,7 @@ class StudentHistory(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='history')
     school = models.ForeignKey('schools.School', on_delete=models.CASCADE, null=True, blank=True)
+    school_name = models.CharField(max_length=200, blank=True, null=True, help_text="Snapshot of school name at time of recording")
     academic_year = models.ForeignKey('enrollments.AcademicYear', on_delete=models.CASCADE, null=True, blank=True)
     academic_year_name = models.CharField(max_length=20, null=True, blank=True, help_text="e.g. 2024-2025")
     grade_config = models.ForeignKey('schools.GradeConfiguration', on_delete=models.CASCADE, null=True, blank=True, related_name='student_history')
@@ -257,3 +270,7 @@ class StudentHistory(models.Model):
     
     def __str__(self):
         return f"{self.student.full_name_display} - {self.academic_year_name} - {self.grade_name}"
+
+
+# Re-export SchoolTenure for convenience
+from apps.students.models_tenure import SchoolTenure  # noqa: E402, F401

@@ -54,7 +54,11 @@ class School(models.Model):
     timezone = models.CharField(max_length=50, default='Asia/Kolkata')
     default_currency = models.CharField(max_length=10, default='INR')
     academic_year_start_month = models.IntegerField(default=4, help_text="Month when academic year starts (1-12)")
+    academic_year_start_day = models.IntegerField(default=1, help_text="Day when academic year starts (1-31)")
+    academic_year_end_month = models.IntegerField(default=3, help_text="Month when academic year ends (1-12)")
+    academic_year_end_day = models.IntegerField(default=31, help_text="Day when academic year ends (1-31)")
     primary_language = models.CharField(max_length=50, default='English')
+
     
     # Optional Fields
     logo = models.ImageField(upload_to='school_logos/', null=True, blank=True)

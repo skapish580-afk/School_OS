@@ -54,13 +54,33 @@ class AttendanceSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = AttendanceSession
         fields = [
-            'id', 'grade', 'section', 'date', 'session_type',
+            'id', 'grade', 'section', 'date', 'session_type', 'subject',
             'is_locked', 'created_by_name', 'created_at', 'updated_at',
             'locked_by_name', 'locked_at',
             'total_students', 'present_count', 'absent_count', 'late_count', 'out_count',
             'records'
         ]
         read_only_fields = ['created_at', 'updated_at', 'locked_at']
+
+    def validate(self, attrs):
+        date_val = attrs.get('date')
+        if date_val:
+            if date_val.weekday() == 6:
+                raise serializers.ValidationError("Attendance cannot be marked on a Sunday.")
+            
+            from apps.schools.models_calendar import Holiday
+            request = self.context.get('request')
+            school = None
+            if request and request.user:
+                school = getattr(request.user, 'school', None)
+            
+            if school:
+                if Holiday.objects.filter(school=school, date=date_val).exists():
+                    raise serializers.ValidationError("Attendance cannot be marked on a school holiday.")
+            else:
+                if Holiday.objects.filter(date=date_val).exists():
+                    raise serializers.ValidationError("Attendance cannot be marked on a school holiday.")
+        return attrs
 
     def get_total_students(self, obj):
         return obj.records.count()

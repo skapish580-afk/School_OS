@@ -5,8 +5,12 @@ import api from '@/lib/api';
 import { Library, Search, ArrowLeft, Loader2, CheckCircle2, Plus, Calendar, Book } from 'lucide-react';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
+import { usePermissionContext } from '@/lib/rbac-context';
 
 export default function StockRegisterPage() {
+  const { hasPermission, isAdmin } = usePermissionContext();
+  const canView = isAdmin || hasPermission('library.view_stock_log') || hasPermission('library.edit_stock_log') || hasPermission('library.view_books') || hasPermission('library.manage_books');
+  const canEdit = isAdmin || hasPermission('library.edit_stock_log') || hasPermission('library.manage_books');
   const [audits, setAudits] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -101,12 +105,14 @@ export default function StockRegisterPage() {
             <p className="text-slate-500 font-medium">Physical inventory and condition tracking.</p>
           </div>
         </div>
-        <button 
-          onClick={() => { resetForm(); setShowAuditModal(true); }}
-          className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-100 flex items-center gap-2"
-        >
-          <Plus size={20} /> New Audit
-        </button>
+        {canEdit && (
+          <button 
+            onClick={() => { resetForm(); setShowAuditModal(true); }}
+            className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-100 flex items-center gap-2"
+          >
+            <Plus size={20} /> New Audit
+          </button>
+        )}
       </div>
 
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex gap-4 ring-1 ring-slate-100">
@@ -180,12 +186,14 @@ export default function StockRegisterPage() {
                   </div>
                 </td>
                 <td className="px-6 py-4 text-right">
-                  <button 
-                    onClick={() => handleEdit(audit)}
-                    className="text-indigo-600 font-bold text-[10px] uppercase tracking-widest hover:text-indigo-800 transition"
-                  >
-                    Edit
-                  </button>
+                  {canEdit && (
+                    <button 
+                      onClick={() => handleEdit(audit)}
+                      className="text-indigo-600 font-bold text-[10px] uppercase tracking-widest hover:text-indigo-800 transition"
+                    >
+                      Edit
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

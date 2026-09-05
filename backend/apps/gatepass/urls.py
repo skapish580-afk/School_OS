@@ -1,10 +1,11 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import GatePassViewSet, GatePassVerificationView, GatePassVerifyAPIView
+from .views import GatePassViewSet, VisitorPassViewSet, GatePassVerificationView, GatePassVerifyAPIView
 from .views_approval import approve_gatepass, reject_gatepass, pending_gatepasses
 
 router = DefaultRouter()
 router.register(r'passes', GatePassViewSet)
+router.register(r'visitors', VisitorPassViewSet)
 
 urlpatterns = [
     path('verify/', GatePassVerificationView.as_view(), name='verify_gatepass'),

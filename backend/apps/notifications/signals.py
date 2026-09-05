@@ -16,20 +16,29 @@ def send_marks_notification(sender, instance, created, **kwargs):
     """
     Signal: When a Result is approved, notify parents.
     """
-    if not created and instance.status == 'APPROVED' and instance.is_latest_attempt:
+    if not created and getattr(instance, 'moderation_status', None) == 'APPROVED':
         try:
             from .services import NotificationService
             service = NotificationService()
             
             # Get student's school
-            school = instance.exam.subject_mapping.enrollment.student.school
+            school = instance.student.school
             
-            service.send_marks_notification(
-                student=instance.exam.subject_mapping.enrollment.student,
-                result=instance,
-                school=school
-            )
-            logger.info(f"Marks notification sent for {instance}")
+            # Check if this is the latest attempt
+            from apps.academics.models import Result as AcademicsResult
+            is_latest = not AcademicsResult.objects.filter(
+                exam=instance.exam, 
+                student=instance.student, 
+                attempt_number__gt=instance.attempt_number
+            ).exists()
+            
+            if is_latest:
+                service.send_marks_notification(
+                    student=instance.student,
+                    result=instance,
+                    school=school
+                )
+                logger.info(f"Marks notification sent for {instance}")
         except Exception as e:
             logger.error(f"Error sending marks notification: {e}")
 
@@ -49,15 +58,21 @@ def send_attendance_notification(sender, instance, **kwargs):
         
         # Calculate current attendance percentage
         from apps.attendance.models import StudentAttendance
-        total_days = StudentAttendance.objects.filter(
+        from apps.schools.models_calendar import Holiday
+        
+        holiday_dates = Holiday.objects.filter(school=school).values_list('date', flat=True)
+        
+        attendance_qs = StudentAttendance.objects.filter(
             student=student,
-            date__year=timezone.now().year
-        ).count()
-        present_days = StudentAttendance.objects.filter(
-            student=student,
-            is_present=True,
-            date__year=timezone.now().year
-        ).count()
+            session__date__year=timezone.now().year
+        ).exclude(
+            session__date__week_day=1
+        ).exclude(
+            session__date__in=holiday_dates
+        )
+        
+        total_days = attendance_qs.count()
+        present_days = attendance_qs.filter(status__in=['PRESENT', 'LATE']).count()
         
         if total_days > 0:
             attendance_percentage = (present_days / total_days) * 100
@@ -89,8 +104,8 @@ def send_discipline_notification(sender, instance, created, **kwargs):
             service.send_discipline_alert(
                 student=student,
                 incident={
-                    'description': instance.incident_type,
-                    'date': instance.date.strftime('%d-%m-%Y'),
+                    'description': instance.category,
+                    'date': instance.incident_date.strftime('%d-%m-%Y') if instance.incident_date else timezone.now().strftime('%d-%m-%Y'),
                     'action': instance.action_taken or 'See school office for details',
                 },
                 school=school

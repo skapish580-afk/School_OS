@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   UserCog, Search, Plus, Trash2, X, Shield, Users, 
   ChevronDown, Check, AlertCircle, RefreshCw, Filter
@@ -14,19 +14,61 @@ import {
   bulkAssignRole,
 } from '@/lib/rbac';
 import { Role, UserRole, StaffWithRoles, AssignRolePayload } from '@/types/rbac';
+import api from '@/lib/api';
+import { usePermissionContext } from '@/lib/rbac-context';
+import { useRouter } from 'next/navigation';
 
 export default function RoleAssignmentsPage() {
+  const { permissions, loading: permissionsLoading, hasPermission } = usePermissionContext();
+  const router = useRouter();
+
+  const userPerms = permissions?.permissions || [];
+  const hasAssignmentAccess = useMemo(() => {
+    if (permissionsLoading) return true;
+    return (
+      permissions?.is_admin ||
+      permissions?.user_type === 'SCHOOL_ADMIN' ||
+      hasPermission('roles.assign_role') ||
+      hasPermission('teachers.assign_role_teaching') ||
+      hasPermission('teachers.assign_role_non_teaching') ||
+      hasPermission('teachers.manage_non_teaching') ||
+      userPerms.some(p => p.startsWith('assignment_settings.'))
+    );
+  }, [permissions, permissionsLoading, hasPermission, userPerms]);
+
+  useEffect(() => {
+    if (!permissionsLoading && !hasAssignmentAccess) {
+      router.push('/dashboard');
+    }
+  }, [hasAssignmentAccess, permissionsLoading, router]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState<string>('');
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false);
-  
+
   // Fetch data
-  const { roles, loading: rolesLoading } = useRoles({ is_active: true });
+  const { roles, loading: rolesLoading } = useRoles({ is_active: true, for_assignment: true });
   const { staff, loading: staffLoading, refetch: refetchStaff } = useStaffWithRoles(searchQuery);
   const { userRoles, loading: userRolesLoading, refetch: refetchUserRoles } = useUserRoles({
     role: selectedRole || undefined,
   });
+
+  if (permissionsLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-gray-600 dark:text-gray-300">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!hasAssignmentAccess) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-red-500 font-bold">Access Denied: You do not have permission to view assignment settings.</div>
+      </div>
+    );
+  }
 
   const handleRemoveAssignment = async (userRoleId: string) => {
     if (!confirm('Are you sure you want to remove this role assignment?')) return;
@@ -147,11 +189,11 @@ export default function RoleAssignmentsPage() {
         </div>
 
         {/* Role Assignments Table */}
-        {selectedRole && (
+        {true && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow mt-6">
             <div className="p-4 border-b border-gray-200 dark:border-gray-700">
               <h2 className="font-semibold text-gray-900 dark:text-white">
-                Role Assignments ({userRoles.length})
+                Role Assignments ({selectedRole ? 'Filtered' : 'All'}) ({userRoles.length})
               </h2>
             </div>
             
@@ -159,7 +201,7 @@ export default function RoleAssignmentsPage() {
               <div className="p-8 text-center text-gray-500">Loading assignments...</div>
             ) : userRoles.length === 0 ? (
               <div className="p-8 text-center text-gray-500">
-                No assignments for this role
+                No role assignments found
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -276,6 +318,7 @@ function StaffMemberRow({
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  const [revoking, setRevoking] = useState(false);
   const [selectedRole, setSelectedRole] = useState('');
 
   const handleQuickAssign = async () => {
@@ -289,6 +332,21 @@ function StaffMemberRow({
       alert(error.response?.data?.error || 'Failed to assign role');
     } finally {
       setAssigning(false);
+    }
+  };
+
+  const handleRevokeAll = async () => {
+    if (!confirm(`Are you sure you want to revoke all role assignments for ${member.first_name} ${member.last_name}?`)) {
+      return;
+    }
+    try {
+      setRevoking(true);
+      await api.post('/auth/rbac/user-roles/revoke_all/', { user_id: member.id });
+      onRefresh();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Failed to revoke roles');
+    } finally {
+      setRevoking(false);
     }
   };
 
@@ -331,6 +389,15 @@ function StaffMemberRow({
             )}
             {member.roles.length > 3 && (
               <span className="text-sm text-gray-500">+{member.roles.length - 3} more</span>
+            )}
+            {member.roles.length > 0 && (
+              <button
+                onClick={handleRevokeAll}
+                disabled={revoking}
+                className="px-2.5 py-1 text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-900/20 dark:hover:bg-red-900/40 dark:text-red-400 rounded-lg transition"
+              >
+                {revoking ? 'Revoking...' : 'Revoke'}
+              </button>
             )}
           </div>
 
@@ -387,6 +454,18 @@ function AssignRoleModal({
   const [error, setError] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  const [selectedRoleDetails, setSelectedRoleDetails] = useState<any>(null);
+
+  useEffect(() => {
+    if (formData.role) {
+      api.get(`/auth/rbac/roles/${formData.role}/`)
+        .then((res) => setSelectedRoleDetails(res.data))
+        .catch((err) => console.error('Failed to fetch role details', err));
+    } else {
+      setSelectedRoleDetails(null);
+    }
+  }, [formData.role]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.user || !formData.role) {
@@ -394,13 +473,18 @@ function AssignRoleModal({
       return;
     }
 
+    await executeAssignment();
+  };
+
+  const executeAssignment = async () => {
     try {
       setLoading(true);
-      // Clean up empty date fields
       const payload = {
         ...formData,
         valid_from: formData.valid_from || undefined,
         valid_until: formData.valid_until || undefined,
+        syllabus_scope_type: 'ALL',
+        syllabus_custom_subjects: [],
       };
       await assignRole(payload);
       onAssigned();
@@ -414,7 +498,7 @@ function AssignRoleModal({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-750">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Assign Role</h3>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
             <X className="h-5 w-5 text-gray-500" />
@@ -512,7 +596,7 @@ function AssignRoleModal({
                   />
                 </div>
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
+              <p className="text-xs text-gray-505 dark:text-gray-400">
                 Leave dates empty for permanent assignment. Set dates for temporary roles (e.g., Acting Principal).
               </p>
             </div>
@@ -529,13 +613,15 @@ function AssignRoleModal({
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50"
             >
               {loading ? 'Assigning...' : 'Assign Role'}
             </button>
           </div>
         </form>
       </div>
+
+
     </div>
   );
 }

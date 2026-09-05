@@ -5,8 +5,12 @@ import { Users, Search, ArrowLeft, Clock, Calendar, UserPlus, Loader2, X } from 
 import Link from 'next/link';
 import api from '@/lib/api';
 import Modal from '@/components/Modal';
+import { usePermissionContext } from '@/lib/rbac-context';
 
 export default function VisitorLogPage() {
+  const { hasPermission, isAdmin } = usePermissionContext();
+  const canView = isAdmin || hasPermission('library.view_visitor_log') || hasPermission('library.edit_visitor_log') || hasPermission('library.view_transactions');
+  const canEdit = isAdmin || hasPermission('library.edit_visitor_log') || hasPermission('library.view_transactions');
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -141,12 +145,14 @@ export default function VisitorLogPage() {
             <p className="text-slate-500 font-medium">Daily library usage and attendance.</p>
           </div>
         </div>
-        <button 
-          onClick={() => setShowModal(true)}
-          className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-100 flex items-center gap-2"
-        >
-          <UserPlus size={20} /> Mark Entry
-        </button>
+        {canEdit && (
+          <button 
+            onClick={() => setShowModal(true)}
+            className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-100 flex items-center gap-2"
+          >
+            <UserPlus size={20} /> Mark Entry
+          </button>
+        )}
       </div>
 
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex gap-4 ring-1 ring-slate-100">

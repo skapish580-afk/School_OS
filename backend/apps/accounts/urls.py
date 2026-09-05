@@ -18,10 +18,11 @@ from .rbac_views import (
     StaffWithRolesListView,
     RolePermissionLogViewSet,
     sync_permissions,
+    RoleLoginView,
+    RoleAwareTokenRefreshView,
 )
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
-    TokenRefreshView,
 )
 
 # Create router for RBAC viewsets
@@ -34,7 +35,7 @@ rbac_router.register(r'logs', RolePermissionLogViewSet, basename='rbac-log')
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
     path('login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('token/refresh/', RoleAwareTokenRefreshView.as_view(), name='token_refresh'),
     path('me/', CurrentUserView.as_view(), name='current_user'),
     
     # Password Reset
@@ -51,4 +52,5 @@ urlpatterns = [
     path('rbac/check-permission/', CheckPermissionView.as_view(), name='check_permission'),
     path('rbac/staff-with-roles/', StaffWithRolesListView.as_view(), name='staff_with_roles'),
     path('rbac/sync-permissions/', sync_permissions, name='sync_permissions'),
+    path('rbac/role-login/', RoleLoginView.as_view(), name='role_login'),
 ]

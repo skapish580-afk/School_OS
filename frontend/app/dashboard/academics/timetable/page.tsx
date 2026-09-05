@@ -5,21 +5,27 @@ import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { Plus, Calendar, Loader2, Search, Clock } from 'lucide-react';
 import Modal from '@/components/Modal';
+import { usePermissionContext } from '@/lib/rbac-context';
 
 interface Timetable {
   id: string;
   section_name: string;
+  section_id: string;
   created_at: string;
+  created_by?: string;
+  created_by_name?: string;
 }
 
 interface Section {
   id: string;
   full_name: string;
   grade_name: string;
+  grade_id?: string;
 }
 
 export default function TimetablePage() {
   const router = useRouter();
+  const { hasPermission, isAdmin, permissions, loading: permissionsLoading } = usePermissionContext();
   const [timetables, setTimetables] = useState<Timetable[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [schoolId, setSchoolId] = useState('');
@@ -32,11 +38,15 @@ export default function TimetablePage() {
     section_id: '',
   });
 
+  const canAddTimetable = isAdmin || hasPermission('academics.add_timetable');
+
   useEffect(() => {
-    fetchSchoolId();
-    fetchTimetables();
-    fetchSections();
-  }, []);
+    if (!permissionsLoading && canAddTimetable) {
+      fetchSchoolId();
+      fetchTimetables();
+      fetchSections();
+    }
+  }, [permissionsLoading, canAddTimetable]);
 
   const fetchSchoolId = async () => {
     try {
@@ -70,7 +80,7 @@ export default function TimetablePage() {
     }
   };
 
-  const handleSubmit = async (data: Record<string, string | number>) => {
+  const handleSubmit = async (data: Record<string, string | number | boolean>) => {
     setSubmitting(true);
     setError('');
     try {
@@ -99,9 +109,18 @@ export default function TimetablePage() {
     }
   };
 
-  const filteredTimetables = timetables.filter(t =>
-    t.section_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const allowedSectionIds = sections.map(s => s.id);
+  const gradeScopes = permissions?.grade_scopes || [];
+  const hasGradeScopeLimits = !isAdmin && gradeScopes.length > 0;
+
+  const filteredTimetables = timetables.filter(t => {
+    const matchesSearch = t.section_name.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
+    if (hasGradeScopeLimits) {
+      return allowedSectionIds.includes(t.section_id);
+    }
+    return true;
+  });
 
   const fields = [
     {
@@ -113,6 +132,24 @@ export default function TimetablePage() {
     },
   ];
 
+  if (permissionsLoading) {
+    return (
+      <div className="flex justify-center items-center p-12">
+        <Loader2 className="animate-spin text-green-600" size={40} />
+      </div>
+    );
+  }
+
+  if (!canAddTimetable) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 bg-white rounded-2xl shadow-sm border border-gray-100 max-w-lg mx-auto mt-12 text-center gap-4">
+        <Calendar size={48} className="text-red-500" />
+        <h2 className="text-2xl font-bold text-gray-800">Access Denied</h2>
+        <p className="text-gray-500">You do not have permission to view or manage the Timetable section.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-6 rounded-2xl shadow-lg">
@@ -123,12 +160,14 @@ export default function TimetablePage() {
             </h1>
             <p className="text-green-100">Create and manage class schedules and periods</p>
           </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="bg-white text-green-600 px-6 py-2 rounded-lg font-bold hover:bg-green-50 transition flex items-center gap-2"
-          >
-            <Plus size={20} /> Add Timetable
-          </button>
+          {canAddTimetable && (
+            <button
+              onClick={() => setShowModal(true)}
+              className="bg-white text-green-600 px-6 py-2 rounded-lg font-bold hover:bg-green-50 transition flex items-center gap-2"
+            >
+              <Plus size={20} /> Add Timetable
+            </button>
+          )}
         </div>
       </div>
 

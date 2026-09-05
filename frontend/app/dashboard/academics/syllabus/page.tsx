@@ -26,7 +26,9 @@ interface SubjectMapping {
 
 export default function SyllabusPage() {
   const router = useRouter();
-  const { formatAcademicYear } = useSettings();
+  const { formatAcademicYear, settings } = useSettings();
+  const currentAcademicYear = settings?.current_academic_year || '';
+  const availableYears = settings?.available_academic_years || [];
   const [syllabuses, setSyllabuses] = useState<Syllabus[]>([]);
   const [subjectMappings, setSubjectMappings] = useState<SubjectMapping[]>([]);
   const [schoolId, setSchoolId] = useState('');
@@ -37,7 +39,7 @@ export default function SyllabusPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [formData, setFormData] = useState({
     subject_mapping_id: '',
-    academic_year: '2025-2026',
+    academic_year: currentAcademicYear,
     total_chapters: '10',
   });
 
@@ -79,7 +81,7 @@ export default function SyllabusPage() {
     }
   };
 
-  const handleSubmit = async (data: Record<string, string | number>) => {
+  const handleSubmit = async (data: Record<string, string | number | boolean>) => {
     setSubmitting(true);
     setError('');
     try {
@@ -96,7 +98,7 @@ export default function SyllabusPage() {
         total_chapters: parseInt(data.total_chapters as string),
       });
       setShowModal(false);
-      setFormData({ subject_mapping_id: '', academic_year: '2025-2026', total_chapters: '10' });
+      setFormData({ subject_mapping_id: '', academic_year: currentAcademicYear, total_chapters: '10' });
       fetchSyllabuses();
     } catch (err: any) {
       setError(err.response?.data?.detail || err.response?.data?.subject_mapping_id?.[0] || 'Failed to create syllabus');
@@ -124,9 +126,9 @@ export default function SyllabusPage() {
     {
       name: 'academic_year',
       label: 'Academic Year',
-      type: 'text' as const,
+      type: 'select' as const,
       required: true,
-      placeholder: '2025-2026',
+      options: availableYears.map(y => ({ value: y, label: y })),
     },
     {
       name: 'total_chapters',

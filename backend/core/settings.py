@@ -19,6 +19,8 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-change-me-later-for-produc
 
 DEBUG = _env_bool('DEBUG', True)
 
+SILENCED_SYSTEM_CHECKS = ['auth.E003']
+
 ALLOWED_HOSTS = [h for h in os.getenv('ALLOWED_HOSTS', '').split(',') if h] or ['localhost', '127.0.0.1', 'testserver', '0.0.0.0']
 
 # Application definition
@@ -42,6 +44,7 @@ INSTALLED_APPS = [
      'apps.students',   # Step 3
      'apps.teachers',   # Step 3
      'apps.enrollments',
+     'apps.timeline',
      'django_filters',
      'apps.academics',
     'apps.promotions',
@@ -74,9 +77,11 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'apps.core.middleware.ThreadLocalRequestMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
 
 ROOT_URLCONF = 'core.urls'
 
@@ -188,6 +193,7 @@ AUTH_USER_MODEL = 'accounts.User'
 # 2. DRF Config
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        'apps.accounts.authentication.RoleRevocationJWTAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
@@ -196,6 +202,7 @@ REST_FRAMEWORK = {
     'DEFAULT_FILTER_BACKENDS': (
         'django_filters.rest_framework.DjangoFilterBackend',
     ),
+    'EXCEPTION_HANDLER': 'apps.core.exception_handler.custom_exception_handler',
 }
 
 # 3. JWT Settings

@@ -2,7 +2,8 @@ from rest_framework import serializers
 from .models import (
     FeeCategory, Invoice, Transaction, FeeSchedule, FeeStructure,
     StudentFeeAssignment, FeeInstallment, FeeHikeConfig, BulkFeeAssignment,
-    FeeLedger, FeeLedgerEntry, DiscountRecord, LateFeeRule, FeeAuditLog, InvoiceItem
+    FeeLedger, FeeLedgerEntry, DiscountRecord, LateFeeRule, FeeAuditLog, InvoiceItem,
+    SalaryDeduction
 )
 
 
@@ -21,7 +22,7 @@ class FeeScheduleSerializer(serializers.ModelSerializer):
             'late_fee_per_day', 'grace_period_days', 'max_late_fee',
             'is_default', 'is_active', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'school', 'created_at', 'updated_at']
 
 
 class FeeScheduleListSerializer(serializers.ModelSerializer):
@@ -201,7 +202,8 @@ class BulkAssignRequestSerializer(serializers.Serializer):
     fee_structure_id = serializers.UUIDField()
     schedule_type = serializers.ChoiceField(
         choices=['YEARLY', 'MONTHLY', 'HALF_YEARLY', 'QUARTERLY', 'BI_MONTHLY'],
-        help_text="Payment frequency type"
+        required=False,
+        allow_null=True
     )
     academic_year = serializers.CharField(max_length=20)
     grade_id = serializers.UUIDField(required=False, allow_null=True)
@@ -219,7 +221,7 @@ class FeeCategorySerializer(serializers.ModelSerializer):
         model = FeeCategory
         fields = ['id', 'school', 'name', 'amount', 'description', 
                   'is_recurring', 'is_active', 'created_at']
-        read_only_fields = ['created_at']
+        read_only_fields = ['id', 'school', 'created_at']
 
 
 class TransactionSerializer(serializers.ModelSerializer):
@@ -246,6 +248,20 @@ class InvoiceSerializer(serializers.ModelSerializer):
     transactions = TransactionSerializer(many=True, read_only=True)
     balance_due = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    effective_status = serializers.SerializerMethodField()
+
+    def get_effective_status(self, obj):
+        """Compute real-time status so stale DB values are never returned to the UI."""
+        from django.utils import timezone
+        if obj.status in ('DRAFT', 'CANCELLED', 'PAID'):
+            return obj.status
+        if obj.paid_amount >= obj.total_amount:
+            return 'PAID'
+        if obj.due_date and obj.due_date < timezone.now().date():
+            return 'OVERDUE'
+        if obj.paid_amount > 0:
+            return 'PARTIAL'
+        return 'UNPAID'
 
     class Meta:
         model = Invoice
@@ -253,10 +269,24 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'id', 'invoice_number', 'student', 'student_name', 'student_suid',
             'school', 'fee_assignment', 'installment', 'academic_year',
             'categories', 'total_amount', 'paid_amount', 'late_fee',
-            'balance_due', 'status', 'status_display', 'period_status', 'due_date',
+            'balance_due', 'status', 'effective_status', 'status_display',
+            'period_status', 'due_date',
             'notes', 'transactions', 'created_at', 'updated_at'
         ]
         read_only_fields = ['invoice_number', 'balance_due', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        student = attrs.get('student')
+        installment = attrs.get('installment')
+        school = attrs.get('school') or (student.school if student else None)
+        
+        if student and installment:
+            from apps.schools.models_settings import SchoolSettings
+            school_settings = SchoolSettings.objects.filter(school=school).first()
+            if school_settings and getattr(school_settings, 'prevent_duplicate_billing', True):
+                if Invoice.objects.filter(student=student, installment=installment).exclude(status='CANCELLED').exists():
+                    raise serializers.ValidationError("An invoice already exists for this installment.")
+        return attrs
 
 
 class InvoiceListSerializer(serializers.ModelSerializer):
@@ -264,12 +294,27 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.user.full_name', read_only=True)
     student_suid = serializers.CharField(source='student.suid', read_only=True)
     balance_due = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    effective_status = serializers.SerializerMethodField()
+
+    def get_effective_status(self, obj):
+        """Compute real-time status so stale DB values are never returned to the UI."""
+        from django.utils import timezone
+        if obj.status in ('DRAFT', 'CANCELLED', 'PAID'):
+            return obj.status
+        if obj.paid_amount >= obj.total_amount:
+            return 'PAID'
+        if obj.due_date and obj.due_date < timezone.now().date():
+            return 'OVERDUE'
+        if obj.paid_amount > 0:
+            return 'PARTIAL'
+        return 'UNPAID'
     
     class Meta:
         model = Invoice
         fields = [
             'id', 'invoice_number', 'student_name', 'student_suid',
-            'total_amount', 'paid_amount', 'balance_due', 'status', 'period_status', 'due_date'
+            'total_amount', 'paid_amount', 'balance_due',
+            'status', 'effective_status', 'period_status', 'due_date'
         ]
 
 
@@ -297,6 +342,7 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
 class FeeLedgerEntrySerializer(serializers.ModelSerializer):
     entry_type_display = serializers.CharField(source='get_entry_type_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
+    payment_mode = serializers.CharField(source='transaction.payment_mode', read_only=True, allow_null=True)
     
     class Meta:
         model = FeeLedgerEntry
@@ -305,7 +351,8 @@ class FeeLedgerEntrySerializer(serializers.ModelSerializer):
             'date', 'description', 'category',
             'reference_number', 'amount', 'balance_after',
             'invoice', 'transaction', 'discount_record',
-            'notes', 'created_at', 'created_by', 'created_by_name'
+            'notes', 'created_at', 'created_by', 'created_by_name',
+            'payment_mode'
         ]
         read_only_fields = ['id', 'balance_after', 'created_at']
 
@@ -313,38 +360,76 @@ class FeeLedgerEntrySerializer(serializers.ModelSerializer):
 class FeeLedgerSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.user.full_name', read_only=True)
     student_suid = serializers.CharField(source='student.suid', read_only=True)
+    is_rte_student = serializers.BooleanField(source='student.is_rte_student', read_only=True)
     entries = FeeLedgerEntrySerializer(many=True, read_only=True)
+    total_reimbursements = serializers.SerializerMethodField()
     
     class Meta:
         model = FeeLedger
         fields = [
-            'id', 'student', 'student_name', 'student_suid', 'school',
+            'id', 'student', 'student_name', 'student_suid', 'is_rte_student', 'school',
             'academic_year', 'opening_balance', 'total_charges',
             'total_payments', 'total_discounts', 'total_fines',
-            'current_balance', 'is_cleared',
+            'current_balance', 'is_cleared', 'total_reimbursements',
             'entries', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'current_balance', 'created_at', 'updated_at']
+
+    def get_total_reimbursements(self, obj):
+        from apps.finance.models import Transaction
+        from django.db.models import Sum
+        try:
+            start_year = int(obj.academic_year.split('-')[0])
+            from datetime import date
+            start_date = date(start_year, 4, 1)
+            end_date = date(start_year + 1, 3, 31)
+            txns = Transaction.objects.filter(
+                student=obj.student,
+                notes="State Government RTE Fee Reimbursement",
+                transaction_date__range=(start_date, end_date)
+            )
+            return txns.aggregate(total=Sum('amount'))['total'] or 0.00
+        except Exception:
+            return 0.00
 
 
 class FeeLedgerListSerializer(serializers.ModelSerializer):
     """Compact serializer for list views"""
     student_name = serializers.CharField(source='student.user.full_name', read_only=True)
     student_suid = serializers.CharField(source='student.suid', read_only=True)
+    is_rte_student = serializers.BooleanField(source='student.is_rte_student', read_only=True)
     grade_name = serializers.SerializerMethodField()
+    total_reimbursements = serializers.SerializerMethodField()
     
     class Meta:
         model = FeeLedger
         fields = [
-            'id', 'student', 'student_name', 'student_suid', 'grade_name',
+            'id', 'student', 'student_name', 'student_suid', 'is_rte_student', 'grade_name',
             'academic_year', 'total_charges', 'total_payments',
-            'current_balance', 'is_cleared'
+            'current_balance', 'is_cleared', 'total_reimbursements'
         ]
     
     def get_grade_name(self, obj):
         if obj.student and obj.student.current_grade:
             return obj.student.current_grade.grade_name
         return None
+
+    def get_total_reimbursements(self, obj):
+        from apps.finance.models import Transaction
+        from django.db.models import Sum
+        try:
+            start_year = int(obj.academic_year.split('-')[0])
+            from datetime import date
+            start_date = date(start_year, 4, 1)
+            end_date = date(start_year + 1, 3, 31)
+            txns = Transaction.objects.filter(
+                student=obj.student,
+                notes="State Government RTE Fee Reimbursement",
+                transaction_date__range=(start_date, end_date)
+            )
+            return txns.aggregate(total=Sum('amount'))['total'] or 0.00
+        except Exception:
+            return 0.00
 
 
 class StudentLedgerHistorySerializer(serializers.Serializer):
@@ -353,6 +438,7 @@ class StudentLedgerHistorySerializer(serializers.Serializer):
     student_name = serializers.CharField()
     student_suid = serializers.CharField()
     current_grade = serializers.CharField()
+    is_rte_student = serializers.BooleanField(default=False)
     ledgers = FeeLedgerSerializer(many=True)
     lifetime_total_charges = serializers.DecimalField(max_digits=12, decimal_places=2)
     lifetime_total_payments = serializers.DecimalField(max_digits=12, decimal_places=2)
@@ -499,3 +585,45 @@ class FeeReportRequestSerializer(serializers.Serializer):
         choices=['json', 'csv', 'excel', 'pdf'],
         default='json'
     )
+
+
+# ============================================================
+# SALARY DEDUCTION SERIALIZER
+# ============================================================
+
+class SalaryDeductionSerializer(serializers.ModelSerializer):
+    teacher_name = serializers.SerializerMethodField(read_only=True)
+    teacher_tuid = serializers.CharField(source='teacher.tuid', read_only=True)
+    recorded_by_name = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = SalaryDeduction
+        fields = [
+            'id', 'school', 'teacher', 'teacher_name', 'teacher_tuid',
+            'month', 'amount', 'description',
+            'recorded_by', 'recorded_by_name', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'recorded_by', 'school']
+
+    def validate(self, data):
+        amount = data.get('amount')
+        description = data.get('description')
+
+        if amount is None or amount <= 0:
+            raise serializers.ValidationError({'amount': 'Amount to Deduct (₹) is mandatory and must be greater than 0.'})
+
+        if not description or not str(description).strip():
+            raise serializers.ValidationError({'description': 'Description / Reason is mandatory.'})
+
+        return data
+
+    def get_teacher_name(self, obj):
+        try:
+            return f"{obj.teacher.user.first_name} {obj.teacher.user.last_name}".strip()
+        except Exception:
+            return obj.teacher.tuid
+
+    def get_recorded_by_name(self, obj):
+        if obj.recorded_by:
+            return getattr(obj.recorded_by, 'full_name', None) or obj.recorded_by.email
+        return None

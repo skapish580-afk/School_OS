@@ -8,14 +8,27 @@ class UserSerializer(serializers.ModelSerializer):
     school_id = serializers.SerializerMethodField()
     school_name = serializers.SerializerMethodField()
     is_platform_admin = serializers.SerializerMethodField()
+    teacher_profile = serializers.SerializerMethodField()
     
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'full_name', 'phone_number', 'is_active', 
-            'role', 'user_type', 'school_id', 'school_name', 'is_platform_admin'
+            'id', 'email', 'first_name', 'last_name', 'full_name', 'phone_number', 'is_active', 
+            'role', 'user_type', 'school_id', 'school_name', 'is_platform_admin', 'teacher_profile'
         ]
         read_only_fields = ['id', 'is_active', 'role', 'school_id', 'school_name', 'is_platform_admin']
+
+    def get_teacher_profile(self, obj):
+        from apps.teachers.models import Teacher
+        t = Teacher.objects.filter(user=obj).first()
+        if not t and obj.user_type == 'ROLE':
+            from apps.accounts.rbac_models import Role
+            r = Role.objects.filter(associated_user=obj).first()
+            if r and r.associated_user:
+                t = Teacher.objects.filter(user=r.associated_user).first()
+        if t:
+            return {'id': t.id, 'tuid': t.tuid, 'full_name': obj.full_name}
+        return None
     
     def get_role(self, obj):
         """Determine user role based on related models and user_type"""
@@ -25,7 +38,7 @@ class UserSerializer(serializers.ModelSerializer):
             return 'SCHOOL_ADMIN'
         if hasattr(obj, 'teacher_profile') and obj.teacher_profile:
             return 'TEACHER'
-        if hasattr(obj, 'student') and obj.student:
+        if (hasattr(obj, 'student_profile') and obj.student_profile) or (hasattr(obj, 'student') and obj.student) or obj.user_type == 'STUDENT':
             return 'STUDENT'
         if obj.user_type == 'ADMIN' or obj.is_staff:
             return 'ADMIN'
@@ -35,23 +48,32 @@ class UserSerializer(serializers.ModelSerializer):
         """Get user's associated school ID"""
         if obj.school:
             return str(obj.school.id)
+        if hasattr(obj, 'student_profile') and obj.student_profile and obj.student_profile.school:
+            return str(obj.student_profile.school.id)
         # Try teacher profile
         if hasattr(obj, 'teacher_profile') and obj.teacher_profile:
             teacher = obj.teacher_profile
-            if hasattr(teacher, 'school') and teacher.school:
-                return str(teacher.school.id)
+            assoc = teacher.school_associations.filter(status='ACTIVE').first()
+            if assoc:
+                return str(assoc.school.id)
         return None
     
     def get_school_name(self, obj):
         """Get user's associated school name"""
         if obj.school:
-            return obj.school.name
+            return getattr(obj.school, 'display_name', '') or getattr(obj.school, 'legal_name', '') or obj.school.name
+        if hasattr(obj, 'student_profile') and obj.student_profile and obj.student_profile.school:
+            sch = obj.student_profile.school
+            return getattr(sch, 'display_name', '') or getattr(sch, 'legal_name', '') or sch.name
         # Try teacher profile
         if hasattr(obj, 'teacher_profile') and obj.teacher_profile:
             teacher = obj.teacher_profile
-            if hasattr(teacher, 'school') and teacher.school:
-                return teacher.school.name
+            assoc = teacher.school_associations.filter(status='ACTIVE').first()
+            if assoc:
+                sch = assoc.school
+                return getattr(sch, 'display_name', '') or getattr(sch, 'legal_name', '') or sch.name
         return None
+
     
     def get_is_platform_admin(self, obj):
         """Check if user is platform admin - only by explicit user_type, not superuser"""

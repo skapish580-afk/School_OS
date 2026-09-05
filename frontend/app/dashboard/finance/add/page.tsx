@@ -78,11 +78,15 @@ export default function CreateInvoicePage() {
     const loadData = async () => {
         try {
             const [studentRes, feeRes] = await Promise.all([
-                api.get('/students/'),
-                api.get('/finance/categories/')
+                api.get('/students/?status=ACTIVE').catch(() => null),
+                api.get('/finance/categories/').catch(() => null)
             ]);
-            setStudents(Array.isArray(studentRes.data) ? studentRes.data : studentRes.data.results || []);
-            setFeeCategories(Array.isArray(feeRes.data) ? feeRes.data : feeRes.data.results || []);
+            if (studentRes) {
+                setStudents(Array.isArray(studentRes.data) ? studentRes.data : studentRes.data.results || []);
+            }
+            if (feeRes) {
+                setFeeCategories(Array.isArray(feeRes.data) ? feeRes.data : feeRes.data.results || []);
+            }
         } catch (e) {
             console.error("Failed to load data", e);
         } finally {
@@ -536,7 +540,7 @@ export default function CreateInvoicePage() {
           <div className="lg:col-span-5 space-y-6">
             
             {/* Student Fee Profile Card */}
-            {selectedStudent && (
+            {selectedStudent && settings?.show_student_fee_history_on_invoice && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 text-white">
                   <div className="flex items-center justify-between">

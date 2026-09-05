@@ -5,8 +5,10 @@ import Link from 'next/link';
 import api from '@/lib/api';
 import { Library, BookOpen, Search, Filter, Plus, Bookmark, Loader2, ArrowUpRight, History, Users, Banknote } from 'lucide-react';
 import Modal from '@/components/Modal';
+import { usePermissionContext } from '@/lib/rbac-context';
 
 export default function LibraryPage() {
+  const { hasPermission, isAdmin } = usePermissionContext();
   const [books, setBooks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -135,7 +137,7 @@ export default function LibraryPage() {
   const fields: any[] = [
     { name: 'title', label: 'Title', type: 'text', required: true },
     { name: 'author', label: 'Author', type: 'text', required: true },
-    { name: 'isbn', label: 'ISBN', type: 'text' },
+    { name: 'isbn', label: 'ISBN Number', type: 'text', required: true },
     { name: 'accession_number', label: 'Accession Number', type: 'text', required: true },
     { name: 'category', label: 'Category', type: 'text' },
     { name: 'publisher', label: 'Publisher', type: 'text' },
@@ -197,40 +199,62 @@ export default function LibraryPage() {
           <p className="text-slate-500 font-medium">Inventory, issues, and fine tracking.</p>
         </div>
         <div className="flex gap-3">
-          <div className="relative">
+          {(() => {
+            const canViewCirculation = isAdmin || hasPermission('library.view_circulation_log') || hasPermission('library.edit_circulation_log') || hasPermission('library.view_transactions');
+            const canViewStock = isAdmin || hasPermission('library.view_stock_log') || hasPermission('library.edit_stock_log') || hasPermission('library.manage_books');
+            const canViewVisitor = isAdmin || hasPermission('library.view_visitor_log') || hasPermission('library.edit_visitor_log') || hasPermission('library.view_transactions');
+            const canViewFines = isAdmin || hasPermission('library.view_fines_log') || hasPermission('library.edit_fines_log') || hasPermission('library.manage_fines');
+            const hasAnyLogPerm = canViewCirculation || canViewStock || canViewVisitor || canViewFines;
+
+            if (!hasAnyLogPerm) return null;
+
+            return (
+              <div className="relative">
+                <button 
+                  onClick={() => setShowLogsDropdown(!showLogsDropdown)}
+                  className="bg-white text-slate-700 px-4 py-2.5 rounded-xl font-bold border border-slate-200 hover:bg-slate-50 transition shadow-sm flex items-center gap-2"
+                >
+                  <History size={18} /> Logs
+                </button>
+                
+                {showLogsDropdown && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowLogsDropdown(false)}></div>
+                    <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-20 py-2 animate-in fade-in zoom-in duration-200">
+                      {canViewCirculation && (
+                        <Link href="/dashboard/library/logs/circulation" className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
+                          <BookOpen size={16} /> Circulation Log
+                        </Link>
+                      )}
+                      {canViewStock && (
+                        <Link href="/dashboard/library/logs/stock" className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
+                          <Library size={16} /> Stock Register
+                        </Link>
+                      )}
+                      {canViewVisitor && (
+                        <Link href="/dashboard/library/logs/visitor" className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
+                          <Users size={16} /> Visitor Log
+                        </Link>
+                      )}
+                      {canViewFines && (
+                        <Link href="/dashboard/library/logs/fines" className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
+                          <Banknote size={16} /> Fines & Fees
+                        </Link>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
+          {(isAdmin || hasPermission('library.edit_books') || hasPermission('library.manage_books')) && (
             <button 
-              onClick={() => setShowLogsDropdown(!showLogsDropdown)}
-              className="bg-white text-slate-700 px-4 py-2.5 rounded-xl font-bold border border-slate-200 hover:bg-slate-50 transition shadow-sm flex items-center gap-2"
+              onClick={() => { resetForm(); setShowAddModal(true); }}
+              className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-100 flex items-center gap-2"
             >
-              <History size={18} /> Logs
+              <Plus size={20} /> Add Book
             </button>
-            
-            {showLogsDropdown && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowLogsDropdown(false)}></div>
-                <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-20 py-2 animate-in fade-in zoom-in duration-200">
-                  <Link href="/dashboard/library/logs/circulation" className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
-                    <BookOpen size={16} /> Circulation Log
-                  </Link>
-                  <Link href="/dashboard/library/logs/stock" className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
-                    <Library size={16} /> Stock Register
-                  </Link>
-                  <Link href="/dashboard/library/logs/visitor" className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
-                    <Users size={16} /> Visitor Log
-                  </Link>
-                  <Link href="/dashboard/library/logs/fines" className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
-                    <Banknote size={16} /> Fines & Fees
-                  </Link>
-                </div>
-              </>
-            )}
-          </div>
-          <button 
-            onClick={() => { resetForm(); setShowAddModal(true); }}
-            className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-100 flex items-center gap-2"
-          >
-            <Plus size={20} /> Add Book
-          </button>
+          )}
         </div>
       </div>
 
@@ -382,12 +406,14 @@ export default function LibraryPage() {
               <p>• Late Fee: ₹{policy?.per_day_late_fee}/day</p>
               <p>• Fines: Lost(₹{policy?.lost_book_fine}) | Damaged(₹{policy?.damaged_book_fine}) | Worn(₹{policy?.worn_book_fine})</p>
             </div>
-            <button 
-              onClick={() => setShowPolicyModal(true)}
-              className="w-full bg-white text-indigo-700 py-3 rounded-xl font-bold text-sm shadow-xl hover:bg-white/90 active:scale-95 transition-all relative z-10"
-            >
-              Update Policy
-            </button>
+            {(isAdmin || hasPermission('library.update_policy') || hasPermission('library.manage_fines')) && (
+              <button 
+                onClick={() => setShowPolicyModal(true)}
+                className="w-full bg-white text-indigo-700 py-3 rounded-xl font-bold text-sm shadow-xl hover:bg-white/90 active:scale-95 transition-all relative z-10"
+              >
+                Update Policy
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -438,12 +464,14 @@ export default function LibraryPage() {
               ))}
             </div>
             <div className="flex gap-3">
-              <button 
-                onClick={() => { setSelectedBook(null); openEditModal(selectedBook); }}
-                className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition active:scale-[0.98]"
-              >
-                Edit Details
-              </button>
+              {(isAdmin || hasPermission('library.edit_books') || hasPermission('library.manage_books')) && (
+                <button 
+                  onClick={() => { setSelectedBook(null); openEditModal(selectedBook); }}
+                  className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition active:scale-[0.98]"
+                >
+                  Edit Details
+                </button>
+              )}
               <button 
                 onClick={() => setSelectedBook(null)}
                 className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 transition active:scale-[0.98]"

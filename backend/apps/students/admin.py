@@ -1,5 +1,10 @@
 from django.contrib import admin
-from .models import Student
+from .models import Student, SchoolTenure
+
+@admin.register(SchoolTenure)
+class SchoolTenureAdmin(admin.ModelAdmin):
+    list_display = ('student_global_id', 'school_name', 'admitted_date', 'transferred_date', 'status')
+    search_fields = ('student_global_id', 'school_name')
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):

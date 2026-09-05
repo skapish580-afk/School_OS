@@ -13,10 +13,12 @@ class AttendanceSession(models.Model):
         ('PERIOD', 'Subject Period'),
     ]
 
+    school = models.ForeignKey('schools.School', on_delete=models.CASCADE, related_name='attendance_sessions', null=True, blank=True)
     grade = models.CharField(max_length=10, help_text="e.g., '10'")
     section = models.CharField(max_length=5, help_text="e.g., 'A'")
     date = models.DateField()
     session_type = models.CharField(max_length=20, choices=SESSION_TYPES, default='DAILY')
+    subject = models.ForeignKey('academics.Subject', on_delete=models.SET_NULL, null=True, blank=True, related_name='attendance_sessions')
     
     # Audit: Who took this attendance?
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
@@ -29,11 +31,12 @@ class AttendanceSession(models.Model):
     locked_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        unique_together = ('grade', 'section', 'date', 'session_type')
+        unique_together = ('school', 'grade', 'section', 'date', 'session_type', 'subject')
         ordering = ['-date', '-created_at']
 
     def __str__(self):
-        return f"{self.grade}-{self.section} : {self.date} ({self.get_session_type_display()})"
+        school_name = self.school.display_name if self.school else "Unknown School"
+        return f"[{school_name}] {self.grade}-{self.section} : {self.date} ({self.get_session_type_display()})"
 
 class StudentAttendance(models.Model):
     """

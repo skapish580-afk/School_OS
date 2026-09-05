@@ -8,8 +8,10 @@ import {
   FileText, Upload, ExternalLink 
 } from 'lucide-react';
 import Modal from '@/components/Modal';
+import { usePermissionContext } from '@/lib/rbac-context';
 
 export default function AssetsPage() {
+  const { hasPermission, isAdmin } = usePermissionContext();
   const [assets, setAssets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -240,24 +242,30 @@ export default function AssetsPage() {
           <p className="text-slate-500 font-medium">Track school inventory, consumables, and fixed assets.</p>
         </div>
         <div className="flex gap-3">
-          <button 
-            onClick={() => setShowScheduleModal(true)}
-            className="bg-slate-100 text-slate-900 px-6 py-2.5 rounded-xl font-bold hover:bg-slate-200 transition flex items-center gap-2"
-          >
-            <ClipboardList size={18} /> Audit
-          </button>
-          <button 
-            onClick={() => setShowSellModal(true)}
-            className="bg-amber-100 text-amber-900 px-6 py-2.5 rounded-xl font-bold hover:bg-amber-200 transition flex items-center gap-2"
-          >
-            <Banknote size={18} /> Sell Assets
-          </button>
-          <button 
-            onClick={() => setShowAddModal(true)}
-            className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-100 flex items-center gap-2"
-          >
-            <Plus size={18} /> Add Asset
-          </button>
+          {(isAdmin || hasPermission('assets.schedule_maintenance') || hasPermission('assets.track_maintenance')) && (
+            <button 
+              onClick={() => setShowScheduleModal(true)}
+              className="bg-slate-100 text-slate-900 px-6 py-2.5 rounded-xl font-bold hover:bg-slate-200 transition flex items-center gap-2"
+            >
+              <ClipboardList size={18} /> Audit
+            </button>
+          )}
+          {(isAdmin || hasPermission('assets.edit_assets') || hasPermission('assets.manage_assets')) && (
+            <button 
+              onClick={() => setShowSellModal(true)}
+              className="bg-amber-100 text-amber-900 px-6 py-2.5 rounded-xl font-bold hover:bg-amber-200 transition flex items-center gap-2"
+            >
+              <Banknote size={18} /> Sell Assets
+            </button>
+          )}
+          {(isAdmin || hasPermission('assets.edit_assets') || hasPermission('assets.manage_assets')) && (
+            <button 
+              onClick={() => setShowAddModal(true)}
+              className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-100 flex items-center gap-2"
+            >
+              <Plus size={18} /> Add Asset
+            </button>
+          )}
         </div>
       </div>
 
@@ -416,7 +424,7 @@ export default function AssetsPage() {
                     <p className="font-medium italic">
                       {searchTerm || categoryFilter ? "No matches found." : "No assets registered yet."}
                     </p>
-                    {!(searchTerm || categoryFilter) && (
+                    {!(searchTerm || categoryFilter) && (isAdmin || hasPermission('assets.edit_assets') || hasPermission('assets.manage_assets')) && (
                       <button 
                         onClick={() => setShowAddModal(true)}
                         className="text-blue-600 text-sm font-bold hover:underline"
@@ -635,7 +643,7 @@ export default function AssetsPage() {
                         >
                           <ExternalLink size={12} /> View Report
                         </a>
-                      ) : (
+                      ) : (isAdmin || hasPermission('assets.schedule_maintenance') || hasPermission('assets.track_maintenance')) ? (
                         <label className="flex-1 py-2 bg-white border border-slate-200 rounded-lg text-[9px] font-black uppercase text-slate-400 cursor-pointer hover:bg-slate-50 flex items-center justify-center gap-1.5 transition-colors">
                           <Upload size={12} /> Upload PDF
                           <input 
@@ -648,8 +656,12 @@ export default function AssetsPage() {
                             }}
                           />
                         </label>
+                      ) : (
+                        <div className="flex-1 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[9px] font-black uppercase text-slate-400 flex items-center justify-center gap-1.5">
+                          Pending Report
+                        </div>
                       )}
-                      {ev.report && (
+                      {ev.report && (isAdmin || hasPermission('assets.schedule_maintenance') || hasPermission('assets.track_maintenance')) && (
                          <label className="p-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-400 cursor-pointer hover:bg-slate-200 transition-colors">
                             <Upload size={12} />
                             <input 
@@ -658,7 +670,7 @@ export default function AssetsPage() {
                               className="hidden" 
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
-                                if (file) handleUploadReport(ev.id, file);
+                                  if (file) handleUploadReport(ev.id, file);
                               }}
                             />
                          </label>

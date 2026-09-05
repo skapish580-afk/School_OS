@@ -9,6 +9,21 @@ class RegisterSchoolView(views.APIView):
     def post(self, request):
         data = request.data
         
+        # Validate that the school code or admin email isn't already taken
+        school_code = data.get('school_code')
+        admin_email = data.get('admin_email')
+        
+        if school_code:
+            from apps.schools.models import School
+            subdomain = school_code.lower().replace('_', '-')
+            if School.objects.filter(code=school_code).exists() or School.objects.filter(subdomain=subdomain).exists():
+                return response.Response({'error': f"School code or subdomain '{school_code}' is already registered."}, status=status.HTTP_400_BAD_REQUEST)
+                
+        if admin_email:
+            from apps.accounts.models import User
+            if User.objects.filter(email=admin_email).exists():
+                return response.Response({'error': f"Admin email '{admin_email}' is already registered."}, status=status.HTTP_400_BAD_REQUEST)
+
         # In a real app, use a serializer for validation
         plan = data.get('plan', 'BASIC')
         amount = 4999.00 if plan == 'BASIC' else 9999.00

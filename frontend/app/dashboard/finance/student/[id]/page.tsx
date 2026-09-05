@@ -9,7 +9,7 @@ import {
   CheckCircle, Clock, AlertTriangle, FileText, Receipt,
   CreditCard, History, TrendingUp, Download, IndianRupee,
   GraduationCap, Phone, Mail, ChevronRight, Building,
-  Wallet, PieChart, RefreshCw
+  Wallet, PieChart, RefreshCw, Award
 } from 'lucide-react';
 
 interface FeeInstallment {
@@ -29,6 +29,7 @@ interface PaymentRecord {
   mode: string;
   reference: string;
   invoice_number: string;
+  notes?: string;
 }
 
 interface Invoice {
@@ -147,7 +148,7 @@ export default function StudentFeeProfilePage() {
             {[
               { id: 'overview', label: 'Overview', icon: PieChart },
               { id: 'invoices', label: 'Invoices', icon: FileText },
-              { id: 'payments', label: 'Payments', icon: CreditCard },
+              { id: 'payments', label: student?.is_rte_student ? 'Reimbursements' : 'Payments', icon: CreditCard },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -173,61 +174,113 @@ export default function StudentFeeProfilePage() {
           <div className="space-y-6">
             
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              
-              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Total Fees</p>
-                    <h3 className="text-2xl font-bold text-gray-900 mt-2">₹{summary?.total_fees?.toLocaleString() || 0}</h3>
-                  </div>
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
-                    <IndianRupee className="text-white" size={20} />
+            {student?.is_rte_student ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Total Fees</p>
+                      <h3 className="text-2xl font-bold text-gray-900 mt-2">₹{summary?.total_fees?.toLocaleString() || 0}</h3>
+                    </div>
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
+                      <IndianRupee className="text-white" size={20} />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Total Paid</p>
-                    <h3 className="text-2xl font-bold text-emerald-600 mt-2">₹{summary?.total_paid?.toLocaleString() || 0}</h3>
-                  </div>
-                  <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200">
-                    <CheckCircle className="text-white" size={20} />
+                <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">RTE Fee Waiver</p>
+                      <h3 className="text-2xl font-bold text-indigo-600 mt-2">₹{summary?.total_pending?.toLocaleString() || 0}</h3>
+                    </div>
+                    <div className="w-12 h-12 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                      <Award className="text-white" size={20} />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Pending</p>
-                    <h3 className="text-2xl font-bold text-red-600 mt-2">₹{summary?.total_pending?.toLocaleString() || 0}</h3>
-                  </div>
-                  <div className="w-12 h-12 bg-gradient-to-br from-red-400 to-red-600 rounded-xl flex items-center justify-center shadow-lg shadow-red-200">
-                    <Clock className="text-white" size={20} />
+                <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Reimbursements</p>
+                      <h3 className="text-2xl font-bold text-emerald-600 mt-2">₹{summary?.total_paid?.toLocaleString() || 0}</h3>
+                    </div>
+                    <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200">
+                      <Wallet className="text-white" size={20} />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Next Due</p>
-                    <h3 className="text-lg font-bold text-gray-900 mt-2">
-                      {summary?.next_due_date ? new Date(summary.next_due_date).toLocaleDateString() : 'N/A'}
-                    </h3>
-                    {summary?.next_due_amount > 0 && (
-                      <p className="text-amber-600 text-sm font-semibold">₹{summary.next_due_amount.toLocaleString()}</p>
-                    )}
-                  </div>
-                  <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-amber-200">
-                    <Calendar className="text-white" size={20} />
+                <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Scheme Status</p>
+                      <h3 className="text-2xl font-bold text-emerald-600 mt-2">Active</h3>
+                      <p className="text-xs text-gray-400 mt-1">RTE Government Scheme</p>
+                    </div>
+                    <div className="w-12 h-12 bg-gradient-to-br from-teal-400 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-teal-200">
+                      <CheckCircle className="text-white" size={20} />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Total Fees</p>
+                      <h3 className="text-2xl font-bold text-gray-900 mt-2">₹{summary?.total_fees?.toLocaleString() || 0}</h3>
+                    </div>
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
+                      <IndianRupee className="text-white" size={20} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Total Paid</p>
+                      <h3 className="text-2xl font-bold text-emerald-600 mt-2">₹{summary?.total_paid?.toLocaleString() || 0}</h3>
+                    </div>
+                    <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200">
+                      <CheckCircle className="text-white" size={20} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Pending</p>
+                      <h3 className="text-2xl font-bold text-red-600 mt-2">₹{summary?.total_pending?.toLocaleString() || 0}</h3>
+                    </div>
+                    <div className="w-12 h-12 bg-gradient-to-br from-red-400 to-red-600 rounded-xl flex items-center justify-center shadow-lg shadow-red-200">
+                      <Clock className="text-white" size={20} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Next Due</p>
+                      <h3 className="text-lg font-bold text-gray-900 mt-2">
+                        {summary?.next_due_date ? new Date(summary.next_due_date).toLocaleDateString() : 'N/A'}
+                      </h3>
+                      {summary?.next_due_amount > 0 && (
+                        <p className="text-amber-600 text-sm font-semibold">₹{summary.next_due_amount.toLocaleString()}</p>
+                      )}
+                    </div>
+                    <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-amber-200">
+                      <Calendar className="text-white" size={20} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Current Fee Assignment */}
             {current_assignment && (
@@ -306,10 +359,12 @@ export default function StudentFeeProfilePage() {
                 </div>
               </div>
 
-              {/* Recent Payments */}
+              {/* Recent Payments / Reimbursements */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                  <h3 className="font-bold text-gray-900">Recent Payments</h3>
+                  <h3 className="font-bold text-gray-900">
+                    {student?.is_rte_student ? "Recent Reimbursements" : "Recent Payments"}
+                  </h3>
                   <button 
                     onClick={() => setActiveTab('payments')}
                     className="text-blue-600 text-sm font-medium flex items-center gap-1 hover:text-blue-700"
@@ -323,10 +378,12 @@ export default function StudentFeeProfilePage() {
                       <div key={payment.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                            <CreditCard size={18} />
+                            {student?.is_rte_student ? <Wallet size={18} /> : <CreditCard size={18} />}
                           </div>
                           <div>
-                            <p className="font-semibold text-gray-800">{payment.mode}</p>
+                            <p className="font-semibold text-gray-800">
+                              {student?.is_rte_student ? "State Reimbursement" : payment.mode}
+                            </p>
                             <p className="text-xs text-gray-400">{new Date(payment.date).toLocaleDateString()}</p>
                           </div>
                         </div>
@@ -340,8 +397,17 @@ export default function StudentFeeProfilePage() {
                     ))
                   ) : (
                     <div className="px-6 py-8 text-center text-gray-400">
-                      <CreditCard className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">No payments yet</p>
+                      {student?.is_rte_student ? (
+                        <>
+                          <Wallet className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No reimbursements yet</p>
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No payments yet</p>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -402,11 +468,13 @@ export default function StudentFeeProfilePage() {
           </div>
         )}
 
-        {/* Payments Tab */}
+        {/* Payments / Reimbursements Tab */}
         {activeTab === 'payments' && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-900">Payment History</h3>
+              <h3 className="font-bold text-gray-900">
+                {student?.is_rte_student ? "Reimbursement History" : "Payment History"}
+              </h3>
             </div>
             {payment_history && payment_history.length > 0 ? (
               <div className="divide-y divide-gray-50">
@@ -414,10 +482,12 @@ export default function StudentFeeProfilePage() {
                   <div key={payment.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                        <CreditCard size={20} />
+                        {student?.is_rte_student ? <Wallet size={20} /> : <CreditCard size={20} />}
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-900">{payment.mode}</p>
+                        <p className="font-semibold text-gray-900">
+                          {student?.is_rte_student ? "State Reimbursement" : payment.mode}
+                        </p>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-xs text-gray-400">{new Date(payment.date).toLocaleDateString()}</span>
                           {payment.invoice_number && (
@@ -427,6 +497,11 @@ export default function StudentFeeProfilePage() {
                             </>
                           )}
                         </div>
+                        {payment.notes && (
+                          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2 mt-1.5 whitespace-pre-line font-medium leading-relaxed max-w-xs text-left">
+                            {payment.notes}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">
@@ -440,9 +515,19 @@ export default function StudentFeeProfilePage() {
               </div>
             ) : (
               <div className="px-6 py-12 text-center text-gray-400">
-                <CreditCard className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                <p className="font-medium">No payments recorded</p>
-                <p className="text-sm mt-1">Payments will appear here once recorded</p>
+                {student?.is_rte_student ? (
+                  <>
+                    <Wallet className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                    <p className="font-medium">No reimbursements recorded</p>
+                    <p className="text-sm mt-1">Reimbursements will appear here once recorded</p>
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                    <p className="font-medium">No payments recorded</p>
+                    <p className="text-sm mt-1">Payments will appear here once recorded</p>
+                  </>
+                )}
               </div>
             )}
           </div>

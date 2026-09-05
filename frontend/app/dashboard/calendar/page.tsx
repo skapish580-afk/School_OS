@@ -58,7 +58,7 @@ export default function SchoolCalendarPage() {
     setLoading(true);
     try {
       const [examsRes, holidaysRes, eventsRes] = await Promise.all([
-        api.get('/academics/exams/'),
+        api.get('/academics/exams/').catch(() => ({ data: [] })),
         api.get('/schools/holidays/').catch(() => ({ data: [] })),
         api.get('/schools/events/').catch(() => ({ data: [] }))
       ]);
@@ -167,11 +167,17 @@ export default function SchoolCalendarPage() {
   const handleDelete = async (event: CalendarEvent) => {
     if (!confirm(`Delete "${event.title}"?`)) return;
     try {
-      const [type, id] = event.id.split('-');
+      const dashIndex = event.id.indexOf('-');
+      if (dashIndex === -1) return;
+      const type = event.id.substring(0, dashIndex);
+      const id = event.id.substring(dashIndex + 1);
+
       if (type === 'holiday') {
         await api.delete(`/schools/holidays/${id}/`);
       } else if (type === 'event') {
         await api.delete(`/schools/events/${id}/`);
+      } else if (type === 'exam') {
+        await api.delete(`/academics/exams/${id}/`);
       }
       fetchEvents();
     } catch (error) {

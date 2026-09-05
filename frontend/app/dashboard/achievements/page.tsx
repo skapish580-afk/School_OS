@@ -5,6 +5,7 @@ import api from '@/lib/api';
 import { Plus, Loader2, Trophy, Award, Calendar, ChevronDown, ChevronUp, Search, Sparkles, GraduationCap, Music, Users, Target, Heart, BookOpen, Star } from 'lucide-react';
 import Modal from '@/components/Modal';
 import { useSettings } from '@/lib/SettingsContext';
+import { usePermissionContext } from '@/lib/rbac-context';
 
 // Category icons and colors
 const categoryConfig: Record<string, { icon: any; gradient: string; bg: string; border: string; emoji: string }> = {
@@ -31,7 +32,10 @@ const levelBadges: Record<string, { color: string; label: string }> = {
 };
 
 export default function AchievementsPage() {
-  const { formatAcademicYear } = useSettings();
+  const { hasPermission, isAdmin } = usePermissionContext();
+  const { formatAcademicYear, settings } = useSettings();
+  const currentAcademicYear = settings?.current_academic_year || '';
+  const availableYears = settings?.available_academic_years || [];
   const [awards, setAwards] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [students, setStudents] = useState<any[]>([]);
@@ -56,7 +60,7 @@ export default function AchievementsPage() {
     event_date: new Date().toISOString().split('T')[0],
     position: '',
     awarded_by: '',
-    academic_year: '2024-2025',
+    academic_year: currentAcademicYear,
   });
 
   useEffect(() => {
@@ -72,10 +76,13 @@ export default function AchievementsPage() {
       if (filterLevel) params.append('level', filterLevel);
       if (filterYear) params.append('academic_year', filterYear);
       
+      const studentParams: any = { status: 'ACTIVE' };
+      if (filterYear) studentParams.academic_year = filterYear;
+
       const [awardsRes, statsRes, studentsRes] = await Promise.all([
         api.get(`/achievements/yearly-awards/?${params.toString()}`),
         api.get('/achievements/yearly-awards/stats/'),
-        api.get('/students/')
+        api.get('/students/', { params: studentParams })
       ]);
       
       const awardsList = awardsRes.data?.results || awardsRes.data || [];
@@ -120,7 +127,7 @@ export default function AchievementsPage() {
         event_date: new Date().toISOString().split('T')[0],
         position: '',
         awarded_by: '',
-        academic_year: '2024-2025',
+        academic_year: currentAcademicYear,
       });
       fetchData();
     } catch (err: any) {
@@ -146,11 +153,7 @@ export default function AchievementsPage() {
       label: 'Academic Year',
       type: 'select' as const,
       required: true,
-      options: [
-        { value: '2024-2025', label: '2024-2025' },
-        { value: '2023-2024', label: '2023-2024' },
-        { value: '2022-2023', label: '2022-2023' },
-      ],
+      options: availableYears.map(y => ({ value: y, label: y })),
     },
     {
       name: 'category',
@@ -258,12 +261,14 @@ export default function AchievementsPage() {
           </h1>
           <p className="text-gray-500 text-sm mt-1">Celebrate student success and milestones</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-medium transition flex items-center gap-2 text-sm"
-        >
-          <Plus size={18} /> Add New
-        </button>
+        {(isAdmin || hasPermission('achievements.create_achievement')) && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-medium transition flex items-center gap-2 text-sm"
+          >
+            <Plus size={18} /> Add New
+          </button>
+        )}
       </div>
 
       {/* Stats Grid - Responsive */}

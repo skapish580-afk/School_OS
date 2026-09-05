@@ -4,7 +4,28 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from django.http import HttpResponse
+from django.db.models import Q
 import csv
+import random
+import string
+
+
+def generate_student_password():
+    """
+    Generate 10-char password: at least 3 alphabets (both upper & lower), 4 digits, 3 special chars.
+    """
+    lower_count = random.choice([1, 2])
+    upper_count = 3 - lower_count
+
+    lowers = [random.choice(string.ascii_lowercase) for _ in range(lower_count)]
+    uppers = [random.choice(string.ascii_uppercase) for _ in range(upper_count)]
+    digits = [random.choice(string.digits) for _ in range(4)]
+    specials = [random.choice('@#$%&*!?') for _ in range(3)]
+
+    pwd_chars = lowers + uppers + digits + specials
+    random.shuffle(pwd_chars)
+    return ''.join(pwd_chars)
+
 
 from .models import Student, Guardian, StudentDocument, StudentHistory
 from .serializers import StudentSerializer, StudentDetailSerializer, GuardianSerializer, StudentHistorySerializer, StudentDocumentSerializer
@@ -13,35 +34,125 @@ from apps.core.school_isolation import SchoolIsolationMixin, get_user_school, is
 from apps.accounts.permission_utils import RBACPermission
 
 
+from rest_framework import permissions
+
+class StudentActionPermission(permissions.BasePermission):
+    """
+    Custom permission for StudentViewSet.
+    - create: students.add_student
+    - update, partial_update: students.edit_profile
+    - destroy: students.hide_student
+    - list, retrieve: any of view_student_only, view_profile, view_journey, view_health
+    - profile: students.view_profile
+    - history, cross_school_history: students.view_journey
+    - guardians: students.view_profile or students.view_student_only
+    - confirm_admission: students.edit_profile
+    - others: requires admin
+    """
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+            
+        if user.user_type in ['PLATFORM_ADMIN', 'SCHOOL_ADMIN', 'ADMIN']:
+            return True
+
+        if user.user_type == 'STUDENT':
+            if request.method in permissions.SAFE_METHODS or view.action in ['list', 'retrieve', 'profile', 'history', 'cross_school_history', 'guardians']:
+                return True
+            
+        from apps.accounts.permission_utils import has_permission
+
+        
+        action = view.action
+        
+        if action == 'create':
+            return has_permission(user, 'students.add_student')
+        elif action in ['update', 'partial_update', 'confirm_admission']:
+            if action == 'partial_update' and set(request.data.keys()) == {'status'} and has_permission(user, 'enrollments.change_enrollment_status'):
+                return True
+            return user.user_type == 'TEACHER' or hasattr(user, 'teacher_profile') or has_permission(user, 'students.edit_profile')
+        elif action == 'destroy':
+            return has_permission(user, 'students.hide_student')
+        elif action in ['list', 'retrieve']:
+            return (
+                has_permission(user, 'students.view_student_only') or
+                has_permission(user, 'students.view_profile') or
+                has_permission(user, 'students.view_journey') or
+                has_permission(user, 'students.view_health')
+            )
+        elif action == 'profile':
+            return has_permission(user, 'students.view_profile')
+        elif action in ['history', 'cross_school_history']:
+            return has_permission(user, 'students.view_journey')
+        elif action == 'guardians':
+            return (
+                has_permission(user, 'students.view_profile') or
+                has_permission(user, 'students.view_student_only')
+            )
+        
+        return False
+
+    def has_object_permission(self, request, view, obj):
+        if request.method not in permissions.SAFE_METHODS:
+            from apps.accounts.permission_utils import can_user_edit_object_by_hierarchy
+            allowed, reason = can_user_edit_object_by_hierarchy(request.user, obj)
+            if not allowed:
+                self.message = reason
+                return False
+        return True
+
+
+
 class StudentViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
     queryset = Student.objects.all()
     serializer_class = StudentSerializer
-    permission_classes = [IsAuthenticated]
-    filterset_fields = ['current_section', 'grade_config', 'status']
-    school_field = 'school'
-    
-    # RBAC Configuration
-    rbac_module = 'students'
-    rbac_resource = 'student'
-    rbac_action_permissions = {
-        'profile': 'students.view_student',
-        'history': 'students.view_student',
-        'guardians': 'students.view_student',
-        'export': 'students.export_student',
-        'import_students': 'students.import_student',
-    }
-    
+    permission_classes = [IsAuthenticated, StudentActionPermission]
+    filterset_fields = []
+    def get_object(self):
+        pk = self.kwargs.get('pk')
+        if pk and not str(pk).isdigit():
+            queryset = self.filter_queryset(self.get_queryset())
+            obj = queryset.filter(suid=pk).first()
+            if obj:
+                self.check_object_permissions(self.request, obj)
+                return obj
+        return super().get_object()
+
     def get_queryset(self):
-        """Filter students by user's school."""
+        """Filter students by user's school and query params."""
         queryset = Student.objects.select_related('user', 'grade_config', 'current_section')
         
         # Only Platform Admin sees everything
-        if is_platform_admin(self.request.user):
-            return queryset
+        if not is_platform_admin(self.request.user):
+            school_filter = self.get_school_filter()
+            queryset = queryset.filter(**school_filter)
             
-        # Use SchoolIsolationMixin's helper
-        school_filter = self.get_school_filter()
-        return queryset.filter(**school_filter)
+        # Manual filtering to support ACTIVE + TEMPORARY (defaults to ACTIVE)
+        status = self.request.query_params.get('status', 'ACTIVE')
+        if status != 'ALL':
+            if status == 'ACTIVE':
+                queryset = queryset.filter(status__in=['ACTIVE', 'TEMPORARY'])
+            else:
+                queryset = queryset.filter(status=status)
+                
+        suid = self.request.query_params.get('suid')
+        if suid:
+            queryset = queryset.filter(suid=suid)
+                
+        grade_config = self.request.query_params.get('grade_config')
+        if grade_config:
+            queryset = queryset.filter(grade_config_id=grade_config)
+            
+        current_section = self.request.query_params.get('current_section')
+        if current_section:
+            queryset = queryset.filter(current_section_id=current_section)
+            
+        academic_year = self.request.query_params.get('academic_year')
+        if academic_year:
+            queryset = queryset.filter(enrollments__academic_year=academic_year).distinct()
+
+        return queryset
 
     # --- SECURITY: VIEWING SINGLE PROFILE ---
     def retrieve(self, request, *args, **kwargs):
@@ -85,6 +196,16 @@ class StudentViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
         return Response(serializer.data)
     
     @action(detail=True, methods=['get'])
+    def cross_school_history(self, request, pk=None):
+        """Get student's cross-school history (tenures)"""
+        student = self.get_object()
+        from apps.students.models_tenure import SchoolTenure
+        from apps.students.serializers import SchoolTenureSerializer
+        tenures = SchoolTenure.objects.filter(student_global_id=student.suid).order_by('admitted_date')
+        serializer = SchoolTenureSerializer(tenures, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['get'])
     def guardians(self, request, pk=None):
         """Get student's guardians/parents"""
         student = self.get_object()
@@ -114,6 +235,15 @@ class StudentViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
 
         # Get current academic year
         current_year = AcademicYear.objects.filter(school=school, status='ACTIVE').first()
+        if current_year:
+            current_year_code = current_year.year_code
+        else:
+            try:
+                from apps.schools.models_settings import SchoolSettings
+                settings_obj = SchoolSettings.objects.filter(school=school).first()
+                current_year_code = settings_obj.get_academic_year_code_for_date() if settings_obj else ''
+            except Exception:
+                current_year_code = ''
 
         for idx, row in enumerate(students_data):
             try:
@@ -178,7 +308,7 @@ class StudentViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
                             StudentEnrollment.objects.create(
                                 student=student,
                                 school=school,
-                                academic_year=current_year.year_code if current_year else "2025-2026",
+                                academic_year=current_year_code,
                                 grade=grade_name,
                                 section=section_name or 'A',
                                 status='ACTIVE'
@@ -227,6 +357,20 @@ class StudentViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
             'url': document.file.url
         }, status=201)
 
+    @action(detail=True, methods=['post'])
+    def delete_document(self, request, pk=None):
+        """Delete a student document by document ID"""
+        student = self.get_object()
+        doc_id = request.data.get('document_id')
+        if not doc_id:
+            return Response({'error': 'document_id is required.'}, status=400)
+        try:
+            document = StudentDocument.objects.get(id=doc_id, student=student)
+            document.delete()
+            return Response({'status': 'Document deleted successfully'}, status=200)
+        except StudentDocument.DoesNotExist:
+            return Response({'error': 'Document not found or does not belong to this student.'}, status=404)
+
     @action(detail=False, methods=['get'])
     def export(self, request):
         """Export students list as CSV/JSON"""
@@ -265,6 +409,165 @@ class StudentViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
             ])
         
         return response
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def confirm_admission(self, request, pk=None):
+        student = self.get_object()
+        if student.status != 'TEMPORARY':
+            return Response({'error': 'Student admission is already confirmed or student is not temporary.'}, status=400)
+            
+        # Check required details/fields
+        missing_details = []
+        if not student.user.first_name:
+            missing_details.append("First Name")
+        if not student.user.email:
+            missing_details.append("Email")
+        if not student.date_of_birth:
+            missing_details.append("Date of Birth")
+        if not student.address and not student.address_line1:
+            missing_details.append("Address")
+        if student.latitude is None:
+            missing_details.append("Latitude")
+        if student.longitude is None:
+            missing_details.append("Longitude")
+            
+        if missing_details:
+            return Response({
+                'error': f"Cannot confirm admission. Required details are missing: {', '.join(missing_details)}"
+            }, status=400)
+            
+        # Check required documents
+        required_types = ['BIRTH_CERTIFICATE']
+        existing_types = student.documents.values_list('document_type', flat=True)
+        missing_docs = [t for t in required_types if t not in existing_types]
+        
+        if missing_docs:
+            missing_names = [dict(StudentDocument.DOCUMENT_TYPES).get(t, t) for t in missing_docs]
+            return Response({
+                'error': f"Cannot confirm admission. All required documents must be uploaded. Missing: {', '.join(missing_names)}"
+            }, status=400)
+            
+        # Set status to ACTIVE
+        student.status = 'ACTIVE'
+        student.save()
+        
+        # Update enrollment status to ACTIVE
+        from apps.enrollments.models import StudentEnrollment
+        StudentEnrollment.objects.filter(student=student, status='TEMPORARY').update(status='ACTIVE')
+        
+        return Response({'success': True, 'status': 'ACTIVE'})
+
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+    def register_batch(self, request):
+        """
+        Batch register credentials (username & password) for active students.
+        Username = SUID. Password = randomly generated 10-char password (3 alphabets upper/lower, 4 numbers, 3 special chars).
+        Returns list of student credential records for CSV export.
+        """
+        user_school = get_user_school(request.user)
+        if is_platform_admin(request.user):
+            students = Student.objects.filter(status='ACTIVE')
+        elif user_school:
+            students = Student.objects.filter(
+                Q(school_id=user_school.id) | Q(user__school_id=user_school.id),
+                status='ACTIVE'
+            ).distinct()
+        else:
+            students = Student.objects.none()
+
+
+        records = []
+        for s in students:
+            user = s.user
+            suid = s.suid or (getattr(user, 'email', '') if user else f"STUDENT-{s.id}")
+            pwd = generate_student_password()
+            if user:
+                user.set_password(pwd)
+                user.user_type = 'STUDENT'
+                user.is_active = True
+                user.save()
+
+
+
+            # Determine grade & section safely across models and enrollments
+            grade_val = None
+            section_val = None
+
+            enrollment = s.enrollments.filter(status__in=['ACTIVE', 'TEMPORARY']).first()
+            if enrollment:
+                grade_val = enrollment.grade
+                section_val = enrollment.section
+
+            if not grade_val and getattr(s, 'current_section', None):
+                if s.current_section.grade_config:
+                    grade_val = s.current_section.grade_config.grade_name
+                section_val = s.current_section.section_letter
+
+            if not grade_val and getattr(s, 'grade_config', None):
+                grade_val = s.grade_config.grade_name
+
+            grade = str(grade_val).strip() if grade_val else 'N/A'
+            section = str(section_val).strip() if section_val else 'A'
+
+            if grade == 'N/A' or not grade:
+                grade_section = "N-A"
+            else:
+                grade_section = f"{grade}-{section}"
+
+
+            student_name = ""
+            if user:
+                student_name = user.get_full_name().strip()
+            if not student_name:
+                student_name = getattr(s, 'full_name_display', '') or getattr(s, 'full_name', '') or suid
+
+            records.append({
+                'id': s.id,
+                'suid': suid,
+                'full_name': student_name,
+                'grade': str(grade),
+                'section': str(section),
+                'grade_section': grade_section,
+                'username': suid,
+                'password': pwd
+            })
+
+
+        return Response({
+            'success': True,
+            'count': len(records),
+            'students': records
+        })
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def change_password(self, request, pk=None):
+        """
+        Change/reset password for an individual student.
+        """
+        student = self.get_object()
+        new_password = request.data.get('password', '').strip()
+
+        if not new_password:
+            new_password = generate_student_password()
+
+        user = student.user
+        if not user:
+            return Response({'error': 'Student has no associated user account.'}, status=400)
+
+        user.set_password(new_password)
+        user.user_type = 'STUDENT'
+        user.is_active = True
+        user.save()
+
+
+        return Response({
+            'success': True,
+            'message': f'Password updated successfully for {student.suid}',
+            'username': student.suid,
+            'password': new_password
+        })
+
+
 
 
 
@@ -309,4 +612,37 @@ def teacher_remarks(request):
     return Response({
         'count': len(data),
         'remarks': data
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def student_profile(request):
+    """
+    Get current logged in student profile details.
+    """
+    user = request.user
+    student = Student.objects.filter(user=user).first()
+    if not student:
+        student = Student.objects.filter(suid__iexact=user.username).first()
+    
+    if student:
+        serializer = StudentSerializer(student)
+        data = serializer.data
+        data['suid'] = student.suid
+        data['full_name'] = student.user.get_full_name() or student.user.username
+        data['first_name'] = student.user.first_name
+        data['last_name'] = student.user.last_name
+        data['email'] = student.user.email
+        return Response(data)
+    
+    return Response({
+        'id': user.id,
+        'full_name': user.get_full_name() or user.username,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'email': user.email,
+        'suid': user.username,
+        'role': 'STUDENT',
+        'status': 'ACTIVE'
     })

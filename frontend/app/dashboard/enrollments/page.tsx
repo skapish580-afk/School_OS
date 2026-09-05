@@ -1,14 +1,23 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { Plus, Loader2, Users, BookOpen, Calendar, CheckCircle, XCircle } from 'lucide-react';
 import Modal from '@/components/Modal';
 import { useSettings } from '@/lib/SettingsContext';
+import { usePermissionContext } from '@/lib/rbac-context';
+import PermissionDenied from '@/components/PermissionDenied';
 
 export default function EnrollmentsPage() {
-  const { formatAcademicYear } = useSettings();
+  const { hasPermission, loading: rbacLoading } = usePermissionContext();
+  const router = useRouter();
+  const { formatAcademicYear, settings } = useSettings();
+  const currentAcademicYear = settings?.current_academic_year || '';
   const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [activeCount, setActiveCount] = useState(0);
+  const [withdrawnCount, setWithdrawnCount] = useState(0);
+  const [transferredCount, setTransferredCount] = useState(0);
   const [students, setStudents] = useState<any[]>([]);
   const [grades, setGrades] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
@@ -34,7 +43,7 @@ export default function EnrollmentsPage() {
     setLoading(true);
     try {
       const [enrollmentsRes, studentsRes, gradesRes, sectionsRes, yearsRes] = await Promise.all([
-        api.get(`/enrollments/student-enrollments/?status=${filter}`),
+        api.get('/enrollments/student-enrollments/'),
         api.get('/students/'),
         api.get('/academics/grades/'),
         api.get('/academics/sections/'),
@@ -47,10 +56,53 @@ export default function EnrollmentsPage() {
       const sectionsData = sectionsRes.data.results || sectionsRes.data;
       const yearsData = yearsRes.data.results || yearsRes.data;
 
-      console.log(`DEBUG: enrollments=${enrollmentsData.length}, students=${studentsData.length}, grades=${gradesData.length}, sections=${sectionsData.length}, years=${yearsData.length}`);
+      const parsedEnrollments = Array.isArray(enrollmentsData) ? enrollmentsData : [];
+      const parsedStudents = Array.isArray(studentsData) ? studentsData : [];
 
-      setEnrollments(Array.isArray(enrollmentsData) ? enrollmentsData : []);
-      setStudents(Array.isArray(studentsData) ? studentsData : []);
+      const activeEnrollments = parsedEnrollments.filter((e: any) => e.status === 'ACTIVE' || e.status === 'TEMPORARY');
+      const withdrawnEnrollments = parsedEnrollments.filter((e: any) => e.status === 'WITHDRAWN');
+      const transferredEnrollments = parsedEnrollments.filter((e: any) => e.status === 'TRANSFERRED');
+
+      // Calculate virtual enrollments for ACTIVE filter
+      const unassignedStudents = parsedStudents.filter((student: any) => {
+        const isEligible = student.status === 'ACTIVE' || student.status === 'TEMPORARY';
+        if (!isEligible) return false;
+        const hasEnrollment = activeEnrollments.some(
+          (e: any) => e.student === student.id || e.student_suid === student.suid
+        );
+        return !hasEnrollment;
+      });
+
+      const virtualEnrollments = unassignedStudents.map((student: any) => ({
+        id: `virtual-${student.id}`,
+        student: student.id,
+        student_name: student.full_name || `${student.first_name} ${student.last_name}`,
+        student_suid: student.suid,
+        student_status: student.status,
+        grade: 'Unassigned',
+        section: 'Unassigned',
+        academic_year: '--',
+        enrollment_date: student.admission_date || new Date().toISOString().split('T')[0],
+        status: student.status,
+        isVirtual: true
+      }));
+
+      // Set counts
+      setActiveCount(activeEnrollments.length + virtualEnrollments.length);
+      setWithdrawnCount(withdrawnEnrollments.length);
+      setTransferredCount(transferredEnrollments.length);
+
+      let finalEnrollments = [];
+      if (filter === 'ACTIVE') {
+        finalEnrollments = [...activeEnrollments, ...virtualEnrollments];
+      } else if (filter === 'WITHDRAWN') {
+        finalEnrollments = withdrawnEnrollments;
+      } else if (filter === 'TRANSFERRED') {
+        finalEnrollments = transferredEnrollments;
+      }
+
+      setEnrollments(finalEnrollments);
+      setStudents(parsedStudents);
       setGrades(Array.isArray(gradesData) ? gradesData : []);
       setSections(Array.isArray(sectionsData) ? sectionsData : []);
       setAcademicYears(Array.isArray(yearsData) ? yearsData : []);
@@ -67,7 +119,7 @@ export default function EnrollmentsPage() {
     try {
       // 1. Find labels from IDs
       const selectedYear = academicYears.find(y => y.id === Number(data.academic_year) || y.id === data.academic_year);
-      const yearLabel = selectedYear?.year_code || '2025-2026';
+      const yearLabel = selectedYear?.year_code || currentAcademicYear;
       
       const selectedGrade = grades.find(g => g.id === data.grade || g.id === Number(data.grade));
       const selectedSection = sections.find(s => s.id === data.section || s.id === Number(data.section));
@@ -98,10 +150,34 @@ export default function EnrollmentsPage() {
 
   const handleStatusChange = async (enrollmentId: string, newStatus: string) => {
     try {
-      await api.patch(`/enrollments/student-enrollments/${enrollmentId}/`, { status: newStatus });
+      if (enrollmentId.startsWith('virtual-')) {
+        const studentId = enrollmentId.replace('virtual-', '');
+        const studentObj = students.find(s => String(s.id) === String(studentId));
+        const gradeName = studentObj?.grade_config?.grade_name || '-';
+        const sectionLetter = studentObj?.current_section?.section_letter || '-';
+        
+        // Find active academic year
+        const activeYear = academicYears.find(y => y.status === 'ACTIVE') || academicYears[0];
+        const yearCode = activeYear?.year_code || currentAcademicYear;
+        
+        await api.post('/enrollments/student-enrollments/', {
+          student: studentId,
+          academic_year: yearCode,
+          grade: gradeName,
+          section: sectionLetter,
+          enrollment_date: new Date().toISOString().split('T')[0],
+          status: newStatus
+        });
+      } else {
+        const enrollmentObj = enrollments.find(e => String(e.id) === String(enrollmentId));
+        if (enrollmentObj && enrollmentObj.student) {
+          await api.patch(`/students/${enrollmentObj.student}/`, { status: newStatus });
+        }
+        await api.patch(`/enrollments/student-enrollments/${enrollmentId}/`, { status: newStatus });
+      }
       fetchData();
     } catch (error) {
-      console.error('Failed to update enrollment status', error);
+      console.error('Failed to update status', error);
     }
   };
 
@@ -118,10 +194,23 @@ export default function EnrollmentsPage() {
       ACTIVE: 'bg-green-100 text-green-800',
       COMPLETED: 'bg-blue-100 text-blue-800',
       WITHDRAWN: 'bg-red-100 text-red-800',
-      TRANSFERRED: 'bg-orange-100 text-orange-800'
+      TRANSFERRED: 'bg-orange-100 text-orange-800',
+      TEMPORARY: 'bg-amber-100 text-amber-800'
     };
     return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800';
   };
+
+  if (rbacLoading) {
+    return (
+      <div className="flex justify-center items-center py-40">
+        <Loader2 className="animate-spin text-blue-600" size={50} />
+      </div>
+    );
+  }
+
+  if (!hasPermission('enrollments.view_enrollment')) {
+    return <PermissionDenied title="Access Denied" message="You do not have permission to view enrollments." />;
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -149,27 +238,11 @@ export default function EnrollmentsPage() {
                 Seed Academic Years
               </button>
             )}
-            <button
-              onClick={() => {
-                setFormData({
-                  student: '',
-                  academic_year: '',
-                  grade: '',
-                  section: '',
-                  enrollment_date: '',
-                });
-                setShowModal(true);
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
-            >
-              <Plus size={18} />
-              New Enrollment
-            </button>
           </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
@@ -177,22 +250,9 @@ export default function EnrollmentsPage() {
             </div>
             <div>
               <div className="text-2xl font-bold">
-                {enrollments.filter(e => e.status === 'ACTIVE').length}
+                {activeCount}
               </div>
-              <div className="text-sm text-gray-600">Active</div>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <BookOpen className="text-blue-600" size={20} />
-            </div>
-            <div>
-              <div className="text-2xl font-bold">
-                {enrollments.filter(e => e.status === 'COMPLETED').length}
-              </div>
-              <div className="text-sm text-gray-600">Completed</div>
+              <div className="text-sm text-gray-600">Active / Temporary</div>
             </div>
           </div>
         </div>
@@ -203,7 +263,7 @@ export default function EnrollmentsPage() {
             </div>
             <div>
               <div className="text-2xl font-bold">
-                {enrollments.filter(e => e.status === 'WITHDRAWN').length}
+                {withdrawnCount}
               </div>
               <div className="text-sm text-gray-600">Withdrawn</div>
             </div>
@@ -216,7 +276,7 @@ export default function EnrollmentsPage() {
             </div>
             <div>
               <div className="text-2xl font-bold">
-                {enrollments.filter(e => e.status === 'TRANSFERRED').length}
+                {transferredCount}
               </div>
               <div className="text-sm text-gray-600">Transferred</div>
             </div>
@@ -226,7 +286,7 @@ export default function EnrollmentsPage() {
 
       {/* Filter */}
       <div className="flex gap-3">
-        {['ACTIVE', 'COMPLETED', 'WITHDRAWN', 'TRANSFERRED'].map(status => (
+        {['ACTIVE', 'WITHDRAWN', 'TRANSFERRED'].map(status => (
           <button
             key={status}
             onClick={() => setFilter(status)}
@@ -287,18 +347,21 @@ export default function EnrollmentsPage() {
                       {enrollment.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    {enrollment.status === 'ACTIVE' && (
+                   <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    {hasPermission('enrollments.change_enrollment_status') && (enrollment.status === 'ACTIVE' || enrollment.status === 'TEMPORARY') ? (
                       <select
                         onChange={(e) => handleStatusChange(enrollment.id, e.target.value)}
                         className="text-sm border border-gray-300 rounded px-2 py-1"
                         defaultValue=""
                       >
                         <option value="" disabled>Change Status</option>
-                        <option value="COMPLETED">Complete</option>
                         <option value="WITHDRAWN">Withdraw</option>
-                        <option value="TRANSFERRED">Transfer</option>
+                        {enrollment.status === 'ACTIVE' && (
+                          <option value="TRANSFERRED">Transfer</option>
+                        )}
                       </select>
+                    ) : (
+                      <span className="text-gray-400 font-mono">-</span>
                     )}
                   </td>
                 </tr>
@@ -364,7 +427,7 @@ export default function EnrollmentsPage() {
           ]}
           onSubmit={handleSubmit}
           formData={formData}
-          onFormChange={(field, value) => setFormData(prev => ({ ...prev, [field]: value }))}
+          onFormChange={(field, value) => setFormData((prev: any) => ({ ...prev, [field]: value }))}
           submitLabel="Enroll Student"
           loading={submitting}
           error={error}

@@ -113,12 +113,8 @@ class Section(models.Model):
     
     @property
     def student_count(self):
-        """Get current student count from enrollments"""
-        from apps.enrollments.models import StudentEnrollment
-        return StudentEnrollment.objects.filter(
-            section=self,
-            status='ACTIVE'
-        ).count()
+        """Get current student count from students profile"""
+        return self.current_students.filter(status='ACTIVE').count()
     
     @property
     def can_enroll(self):
@@ -151,6 +147,7 @@ class Subject(models.Model):
     
     # Module 2: Subject classification
     subject_type = models.CharField(max_length=20, choices=SUBJECT_TYPES, default='CORE')
+    subject_limit = models.PositiveIntegerField(null=True, blank=True, help_text="Maximum capacity limit for elective subject")
     
     # Module 2: Rules for subject
     passing_marks = models.PositiveIntegerField(default=40, help_text="Minimum marks to pass")
@@ -218,6 +215,9 @@ class Timetable(models.Model):
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='timetables')
     section = models.OneToOneField(Section, on_delete=models.CASCADE, related_name='timetable')
     
+    # Track creator of timetable
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_timetables')
+    
     # Module 3: Timetable lock control
     is_locked = models.BooleanField(default=False, help_text="Lock to prevent changes")
     locked_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='locked_timetables')
@@ -228,6 +228,10 @@ class Timetable(models.Model):
     def __str__(self):
         return f"Timetable - {self.section.full_name}"
     
+    @property
+    def grade(self):
+        return self.section.grade_config
+
     def can_modify(self, user):
         """Check if user can modify this timetable"""
         if self.is_locked:
@@ -268,7 +272,15 @@ class Period(models.Model):
 
     def __str__(self):
         return f"{self.day} Period {self.period_number} - {self.subject_mapping}"
-    
+
+    @property
+    def grade(self):
+        return self.timetable.section.grade_config
+
+    @property
+    def section(self):
+        return self.timetable.section
+
     @property
     def assigned_teacher(self):
         """Get the assigned teacher (or substitute if applicable)"""
@@ -412,6 +424,20 @@ class Exam(models.Model):
     # Module 5: Grace marks (admin only)
     grace_marks = models.PositiveIntegerField(default=0, help_text="Admin-set grace marks")
     
+    # Module 6: Marks entry locking
+    marks_locked = models.BooleanField(default=False, help_text="Locked - no further changes to marks/results allowed")
+    
+    ASSESSMENT_CATEGORIES = [
+        ('INTERNAL', 'Internal Marks'),
+        ('PRACTICAL', 'Practicals/Practical Exams'),
+    ]
+    assessment_category = models.CharField(
+        max_length=20,
+        choices=ASSESSMENT_CATEGORIES,
+        default='INTERNAL',
+        help_text="Category of assessment for marks entry"
+    )
+    
     academic_year = models.CharField(max_length=9)
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -467,6 +493,10 @@ class Result(models.Model):
     grade = models.CharField(max_length=5, blank=True)
     grade_point = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
     
+    # Aggregated marks
+    aggregated_internal_marks = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    aggregated_practical_marks = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+
     remarks = models.TextField(blank=True)
     
     recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='results_recorded')
@@ -725,6 +755,28 @@ class StudentPromotionDecision(models.Model):
     
     def __str__(self):
         return f"{self.student.first_name} {self.student.last_name} - {self.academic_year} - {self.overall_status}"
+
+
+class DirectEvaluation(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey('schools.School', on_delete=models.CASCADE, related_name='direct_evaluations')
+    section = models.ForeignKey('academics.Section', on_delete=models.CASCADE, related_name='direct_evaluations')
+    subject_mapping = models.ForeignKey('academics.SubjectMapping', on_delete=models.CASCADE, related_name='direct_evaluations')
+    category_id = models.CharField(max_length=10)  # 'sa', 'ssc', 'dc'
+    
+    config = models.JSONField(default=dict, blank=True)
+    grades = models.JSONField(default=dict, blank=True)
+    is_locked = models.BooleanField(default=False)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('school', 'section', 'subject_mapping', 'category_id')
+        db_table = 'academics_direct_evaluation'
+
+    def __str__(self):
+        return f"{self.subject_mapping.subject.name} ({self.section.full_name}) - {self.category_id}"
 
 
 # Import assignment models

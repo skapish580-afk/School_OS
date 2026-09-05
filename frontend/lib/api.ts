@@ -55,6 +55,7 @@ api.interceptors.response.use(
             // No refresh token, redirect to login
             localStorage.removeItem('access_token');
             localStorage.removeItem('refresh_token');
+            localStorage.removeItem('user');
             window.location.href = '/login';
             return Promise.reject(new Error('No refresh token available'));
           }
@@ -64,6 +65,7 @@ api.interceptors.response.use(
         if (typeof window !== 'undefined') {
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
+          localStorage.removeItem('user');
           window.location.href = '/login';
         }
         return Promise.reject(refreshError);
@@ -75,8 +77,8 @@ api.interceptors.response.use(
 );
 
 
-export const getMediaUrl = (path: string) => {
-  if (!path) return null;
+export const getMediaUrl = (path: string | null | undefined) => {
+  if (!path) return undefined;
   if (path.startsWith('http')) return path;
   
   // Extract base URL from API_BASE (e.g., http://127.0.0.1:8000/api/v1 -> http://127.0.0.1:8000)

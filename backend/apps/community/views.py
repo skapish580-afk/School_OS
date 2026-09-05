@@ -25,7 +25,7 @@ class AlumniDirectoryView(views.APIView):
 
     def get(self, request):
         queryset = Student.objects.filter(
-            status='GRADUATED',
+            status__in=['ALUMNI', 'GRADUATED', 'PENDING_ALUMNI'],
             alumni_directory_consent=True
         )
         

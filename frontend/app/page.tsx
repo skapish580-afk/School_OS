@@ -11,7 +11,7 @@ export default function Home() {
           The comprehensive operating system for modern education. Manage students, teachers, finances, and more with a single, unified platform.
         </p>
         
-        <div className="flex gap-4 justify-center pt-4">
+        <div className="flex flex-wrap gap-4 justify-center pt-4">
           <Link 
             href="/onboarding" 
             className="bg-black text-white px-8 py-4 rounded-2xl font-bold hover:bg-gray-800 transition-all shadow-xl hover:shadow-black/10 scale-100 hover:scale-105 active:scale-95"
@@ -19,10 +19,16 @@ export default function Home() {
             Register School
           </Link>
           <Link 
+            href="/students/login" 
+            className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-8 py-4 rounded-2xl font-bold hover:from-indigo-700 hover:to-blue-700 transition-all shadow-lg shadow-indigo-500/20 scale-100 hover:scale-105 active:scale-95 flex items-center gap-2"
+          >
+            Student Portal
+          </Link>
+          <Link 
             href="/login" 
             className="bg-white text-gray-900 border-2 border-gray-100 px-8 py-4 rounded-2xl font-bold hover:bg-gray-50 transition-all shadow-sm scale-100 hover:scale-105 active:scale-95"
           >
-            Login
+            Admin/Staff Login
           </Link>
         </div>
         

@@ -40,7 +40,7 @@ def get_class_full_day_attendance(request, grade, section):
         
         # Check feature toggle
         from apps.schools.models import School
-        school = School.objects.first()  # TODO: Get from teacher's assignment
+        school = request.user.school or School.objects.first()
         if school and hasattr(school, 'settings'):
             if not school.settings.enable_class_teacher_attendance_edit:
                 return Response(
@@ -149,7 +149,7 @@ def edit_attendance_record(request, attendance_id):
         
         # Check feature toggle
         from apps.schools.models import School
-        school = School.objects.first()
+        school = user.school or School.objects.first()
         if school and hasattr(school, 'settings'):
             if not school.settings.enable_class_teacher_attendance_edit and not user.is_staff:
                 return Response(

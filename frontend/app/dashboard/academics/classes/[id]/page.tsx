@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import api from '@/lib/api';
 import { ArrowLeft, Loader2, Users, BookOpen, User } from 'lucide-react';
+import { usePermissionContext } from '@/lib/rbac-context';
 
 interface Section {
   id: string;
@@ -11,6 +12,7 @@ interface Section {
   grade_name: string;
   class_teacher_name: string | null;
   student_count: number;
+  room_number: string | null;
 }
 
 interface Student {
@@ -29,35 +31,82 @@ interface SubjectMapping {
 export default function SectionDetailPage() {
   const params = useParams();
   const sectionId = params?.id as string;
+  const { hasPermission, isAdmin, loading: permissionsLoading } = usePermissionContext();
+  const canView = isAdmin || hasPermission('academics.view_class');
   
   const [section, setSection] = useState<Section | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [subjects, setSubjects] = useState<SubjectMapping[]>([]);
+  const [allSubjects, setAllSubjects] = useState<any[]>([]);
+  const [electiveMapping, setElectiveMapping] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (sectionId) {
+    if (sectionId && !permissionsLoading && canView) {
       fetchSectionDetails();
       fetchStudents();
       fetchSubjects();
+      fetchAllSubjects();
     }
-  }, [sectionId]);
+  }, [sectionId, permissionsLoading, canView]);
+
+  const normalizeGradeKey = (g: string) => (g || '').toLowerCase().replace(/grade/g, '').trim();
+
+  const loadElectiveMappingsForGrade = (gradeName: string): Record<string, string[]> => {
+    if (!gradeName || typeof window === 'undefined') return {};
+    const norm = normalizeGradeKey(gradeName);
+    try {
+      const savedRaw = localStorage.getItem(`student_elective_mappings_grade_${gradeName}`);
+      if (savedRaw) return JSON.parse(savedRaw);
+
+      const savedNorm = localStorage.getItem(`student_elective_mappings_grade_${norm}`);
+      if (savedNorm) return JSON.parse(savedNorm);
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('student_elective_mappings_grade_')) {
+          const kGrade = key.replace('student_elective_mappings_grade_', '');
+          if (normalizeGradeKey(kGrade) === norm) {
+            const val = localStorage.getItem(key);
+            if (val) return JSON.parse(val);
+          }
+        }
+      }
+    } catch (e) {}
+    return {};
+  };
 
   const fetchSectionDetails = async () => {
     try {
       const response = await api.get(`/academics/sections/${sectionId}/`);
-      setSection(response.data);
+      const secData = response.data;
+      setSection(secData);
+
+      if (secData?.grade_name) {
+        const mappings = loadElectiveMappingsForGrade(secData.grade_name);
+        setElectiveMapping(mappings);
+      }
     } catch (error) {
       console.error('Failed to load section', error);
       setError('Failed to load section details');
     }
   };
 
+  const fetchAllSubjects = async () => {
+    try {
+      const res = await api.get('/academics/subjects/');
+      setAllSubjects(Array.isArray(res.data) ? res.data : res.data.results || []);
+    } catch (e) {
+      console.error('Failed to load all subjects', e);
+    }
+  };
+
   const fetchStudents = async () => {
     try {
-      const response = await api.get(`/academics/enrollments/?section=${sectionId}`);
-      setStudents(response.data);
+      const response = await api.get(`/students/?current_section=${sectionId}&status=ACTIVE`);
+      const data = response.data;
+      setStudents(Array.isArray(data) ? data : data.results || []);
     } catch (error) {
       console.error('Failed to load students', error);
     }
@@ -73,10 +122,18 @@ export default function SectionDetailPage() {
     }
   };
 
-  if (loading && !section) {
+  if (permissionsLoading || (loading && !section)) {
     return (
       <div className="flex justify-center items-center p-12">
         <Loader2 className="animate-spin text-blue-600" size={40} />
+      </div>
+    );
+  }
+
+  if (!canView) {
+    return (
+      <div className="p-8 text-center text-red-500 font-medium bg-red-50 rounded-xl border border-red-100 max-w-md mx-auto mt-12">
+        Access Denied. You do not have permission to view class and section details.
       </div>
     );
   }
@@ -95,7 +152,7 @@ export default function SectionDetailPage() {
       </div>
 
       {/* Section Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-xl border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
@@ -120,6 +177,13 @@ export default function SectionDetailPage() {
           <div>
             <p className="text-sm text-gray-600">Class Teacher</p>
             <p className="text-lg font-bold text-gray-900 mt-2">{section?.class_teacher_name || 'Not Assigned'}</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl border border-gray-200">
+          <div>
+            <p className="text-sm text-gray-600">Room Number</p>
+            <p className="text-lg font-bold text-gray-900 mt-2">{section?.room_number || 'Not Assigned'}</p>
           </div>
         </div>
       </div>
@@ -158,16 +222,41 @@ export default function SectionDetailPage() {
                   <th className="text-left py-3 px-4 font-semibold text-gray-900">Roll No</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-900">Name</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-900">Email</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Elective Subjects Opted</th>
                 </tr>
               </thead>
               <tbody>
-                {students.map((student) => (
-                  <tr key={student.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
-                    <td className="py-3 px-4 text-gray-900 font-medium">{student.roll_number || '-'}</td>
-                    <td className="py-3 px-4 text-gray-900">{student.first_name} {student.last_name}</td>
-                    <td className="py-3 px-4 text-gray-600">{student.email}</td>
-                  </tr>
-                ))}
+                {students.map((student: any) => {
+                  const optedElectives = allSubjects.filter(sub => {
+                    const isElective = !sub.is_core || (sub.subject_type || '').toUpperCase() === 'ELECTIVE';
+                    if (!isElective) return false;
+                    const mappedIds = (electiveMapping[sub.id] || []).map((id: any) => String(id));
+                    const stId = String(student.id || '');
+                    const stSuid = String(student.suid || '');
+                    return mappedIds.includes(stId) || (stSuid && mappedIds.includes(stSuid));
+                  });
+
+                  return (
+                    <tr key={student.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
+                      <td className="py-3 px-4 text-gray-900 font-medium">{student.roll_number || '-'}</td>
+                      <td className="py-3 px-4 text-gray-900 font-semibold">{student.first_name || student.full_name} {student.last_name || ''}</td>
+                      <td className="py-3 px-4 text-gray-600">{student.email || student.user_email || '-'}</td>
+                      <td className="py-3 px-4 text-gray-900">
+                        {optedElectives.length === 0 ? (
+                          <span className="text-gray-400 text-xs italic font-medium">None</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {optedElectives.map(sub => (
+                              <span key={sub.id} className="px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-bold rounded-md border border-purple-200">
+                                {sub.name} ({sub.code})
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

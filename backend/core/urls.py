@@ -17,6 +17,7 @@ urlpatterns = [
     path('api/v1/students/', include('apps.students.urls')),
     path('api/v1/teachers/', include('apps.teachers.urls')),
     path('api/v1/enrollments/', include('apps.enrollments.urls')),
+    path('api/v1/timeline/', include('apps.timeline.urls')),
     
     # Academic Features
     path('api/v1/academics/', include('apps.academics.urls')),

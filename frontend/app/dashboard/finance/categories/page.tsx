@@ -11,6 +11,7 @@ interface FeeCategory {
   name: string;
   amount: string;
   description: string;
+  is_active?: boolean;
 }
 
 export default function FeeCategoriesPage() {
@@ -21,6 +22,7 @@ export default function FeeCategoriesPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [schoolId, setSchoolId] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     amount: '',
@@ -28,14 +30,40 @@ export default function FeeCategoriesPage() {
   });
 
   useEffect(() => {
-    fetchCategories();
+    // Resolve school ID from localStorage (same pattern as finance/page.tsx)
+    const stored = localStorage.getItem('selectedSchool');
+    let sid = '';
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        sid = parsed?.id || parsed?.school_id || stored;
+      } catch {
+        sid = stored;
+      }
+    }
+    if (!sid) {
+      // Fallback: try profile
+      const profile = localStorage.getItem('userProfile');
+      if (profile) {
+        try {
+          const p = JSON.parse(profile);
+          sid = p?.school || p?.school_id || '';
+        } catch {}
+      }
+    }
+    setSchoolId(sid);
+    fetchCategories(sid);
   }, []);
 
-  const fetchCategories = async () => {
+  const fetchCategories = async (sid?: string) => {
     setLoading(true);
     try {
-      const response = await api.get('/finance/categories/');
-      setCategories(response.data);
+      const params: Record<string, string> = {};
+      const resolvedId = sid || schoolId;
+      if (resolvedId) params.school = resolvedId;
+      const response = await api.get('/finance/categories/', { params });
+      const data = response.data;
+      setCategories(Array.isArray(data) ? data : data.results || []);
     } catch (error) {
       console.error('Failed to load categories', error);
     } finally {
@@ -47,25 +75,27 @@ export default function FeeCategoriesPage() {
     setSubmitting(true);
     setError('');
     try {
+      const payload: Record<string, string | number | boolean> = {
+        name: data.name,
+        amount: parseFloat(data.amount as string),
+        description: data.description || '',
+      };
+      // Include school only on create (read-only on backend but some serializers accept it)
+      if (!editingId && schoolId) {
+        payload.school = schoolId;
+      }
+
       if (editingId) {
-        await api.put(`/finance/categories/${editingId}/`, {
-          name: data.name,
-          amount: parseFloat(data.amount as string),
-          description: data.description || '',
-        });
+        await api.put(`/finance/categories/${editingId}/`, payload);
       } else {
-        await api.post('/finance/categories/', {
-          name: data.name,
-          amount: parseFloat(data.amount as string),
-          description: data.description || '',
-        });
+        await api.post('/finance/categories/', payload);
       }
       setShowModal(false);
       setEditingId(null);
       setFormData({ name: '', amount: '', description: '' });
       fetchCategories();
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to save category');
+      setError(err.response?.data?.detail || err.response?.data?.error || 'Failed to save category');
     } finally {
       setSubmitting(false);
     }
@@ -75,7 +105,7 @@ export default function FeeCategoriesPage() {
     if (confirm('Are you sure you want to delete this fee category? This cannot be undone.')) {
       try {
         await api.delete(`/finance/categories/${id}/`);
-        fetchCategories();
+        setCategories(prev => prev.filter(c => c.id !== id));
       } catch (error) {
         alert('Failed to delete category');
       }
@@ -155,7 +185,7 @@ export default function FeeCategoriesPage() {
       {/* Info Banner */}
       <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl">
         <p className="text-sm text-blue-800">
-          <strong>💡 Tip:</strong> Create fee categories like "Tuition Fee", "Lab Fee", "Sports Fee", etc. 
+          <strong>💡 Tip:</strong> Create fee categories like &quot;Tuition Fee&quot;, &quot;Lab Fee&quot;, &quot;Sports Fee&quot;, etc.{' '}
           These will be available when creating invoices for students.
         </p>
       </div>

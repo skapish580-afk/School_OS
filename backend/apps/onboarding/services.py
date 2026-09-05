@@ -70,7 +70,7 @@ def provision_school(onboarding_request):
     )
     
     # 2. Create School Settings
-    SchoolSettings.objects.create(school=school)
+    SchoolSettings.objects.get_or_create(school=school)
     
     # 3. Create Admin User
     admin_user = User.objects.create_user(
@@ -96,7 +96,7 @@ def provision_school(onboarding_request):
     )
     
     # 5. Enable Features based on Plan
-    enabled_features = ['ATTENDANCE', 'ACADEMICS', 'TEACHERS']
+    enabled_features = ['ATTENDANCE', 'ACADEMICS', 'TEACHERS', 'REPORTS', 'COMMUNITY', 'AI_ANALYTICS']
     if plan == 'PREMIUM':
         enabled_features += ['FINANCE', 'HEALTH', 'GATE_PASS', 'LIBRARY', 'TRANSPORT', 'ASSETS']
         

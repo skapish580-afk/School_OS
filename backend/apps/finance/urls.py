@@ -7,7 +7,8 @@ from .views import (
     StudentFeeProfileView,
     # New viewsets
     FeeLedgerViewSet, DiscountRecordViewSet, LateFeeRuleViewSet,
-    FeeAuditLogViewSet, FinanceDashboardView, FinanceSummaryView
+    FeeAuditLogViewSet, FinanceDashboardView, FinanceSummaryView,
+    SalaryDeductionViewSet,
 )
 
 router = DefaultRouter()
@@ -29,6 +30,9 @@ router.register(r'ledgers', FeeLedgerViewSet)
 router.register(r'discounts', DiscountRecordViewSet)
 router.register(r'late-fee-rules', LateFeeRuleViewSet)
 router.register(r'audit-logs', FeeAuditLogViewSet)
+
+# Salary deductions
+router.register(r'salary-deductions', SalaryDeductionViewSet)
 
 urlpatterns = [
     path('invoices/export/', InvoiceViewSet.as_view({'get': 'export'}), name='invoice-export'),

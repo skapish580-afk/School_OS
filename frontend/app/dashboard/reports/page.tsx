@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { FileDown, Loader2, FileText, Table, Calendar } from 'lucide-react';
@@ -10,6 +10,10 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(false);
   const [reportType, setReportType] = useState('attendance');
   const [format, setFormat] = useState('csv');
+  const [selectedGrade, setSelectedGrade] = useState('');
+  const [selectedSection, setSelectedSection] = useState('');
+  const [grades, setGrades] = useState<any[]>([]);
+  const [sections, setSections] = useState<any[]>([]);
   const [dateRange, setDateRange] = useState(() => {
     const end = new Date();
     const start = new Date();
@@ -20,6 +24,25 @@ export default function ReportsPage() {
     };
   });
 
+  useEffect(() => {
+    fetchFilterOptions();
+  }, []);
+
+  const fetchFilterOptions = async () => {
+    try {
+      const [gradesRes, sectionsRes] = await Promise.all([
+        api.get('/academics/grades/'),
+        api.get('/academics/sections/?is_active=true')
+      ]);
+      const gData = Array.isArray(gradesRes.data) ? gradesRes.data : gradesRes.data.results || [];
+      const sData = Array.isArray(sectionsRes.data) ? sectionsRes.data : sectionsRes.data.results || [];
+      setGrades(gData);
+      setSections(sData);
+    } catch (err) {
+      console.error("Failed to load filter options", err);
+    }
+  };
+
   const exportData = async (endpoint: string, filename: string) => {
     setLoading(true);
     try {
@@ -28,6 +51,13 @@ export default function ReportsPage() {
         start_date: dateRange.start,
         end_date: dateRange.end
       });
+      if (selectedGrade) {
+        params.append('grade', selectedGrade);
+      }
+      if (selectedSection) {
+        params.append('section', selectedSection);
+      }
+
       const response = await api.get(`${endpoint}?${params.toString()}`, {
         responseType: 'blob'
       });
@@ -49,6 +79,10 @@ export default function ReportsPage() {
       setLoading(false);
     }
   };
+
+  const availableSections = selectedGrade
+    ? sections.filter(s => s.grade_name === selectedGrade)
+    : sections;
 
   const reports = [
     {
@@ -92,13 +126,13 @@ export default function ReportsPage() {
       {/* Export Options */}
       <div className="bg-white p-6 rounded-lg border border-gray-200">
         <h2 className="text-lg font-semibold mb-4">Export Settings</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Format</label>
             <select
               value={format}
               onChange={(e) => setFormat(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
             >
               <option value="csv">CSV (Excel)</option>
               <option value="pdf">PDF</option>
@@ -111,7 +145,7 @@ export default function ReportsPage() {
               type="date"
               value={dateRange.start}
               onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
             />
           </div>
           <div>
@@ -120,8 +154,41 @@ export default function ReportsPage() {
               type="date"
               value={dateRange.end}
               onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Grade</label>
+            <select
+              value={selectedGrade}
+              onChange={(e) => {
+                setSelectedGrade(e.target.value);
+                setSelectedSection('');
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              <option value="">All Grades</option>
+              {grades.map((g) => (
+                <option key={g.id} value={g.grade_name}>
+                  {g.grade_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Section</label>
+            <select
+              value={selectedSection}
+              onChange={(e) => setSelectedSection(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              <option value="">All Sections</option>
+              {availableSections.map((sec) => (
+                <option key={sec.id} value={sec.section_letter}>
+                  Section {sec.section_letter}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>

@@ -86,6 +86,7 @@ def create_features():
         ('DISCIPLINE', 'Discipline Tracking', 'STANDARD', True, ['STUDENTS']),
         ('ACHIEVEMENTS', 'Achievements & Awards', 'ADVANCED', True, ['STUDENTS']),
         ('NOTIFICATIONS', 'Notifications', 'CORE', True, []),
+        ('EXTENDED_PROFILES', 'Extended Profiles', 'STANDARD', True, ['STUDENTS']),
     ]
     
     features = {}

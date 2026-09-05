@@ -28,7 +28,7 @@ class Command(BaseCommand):
         verbose = options['verbose']
         create_roles = options['create_roles']
         
-        self.stdout.write(self.style.MIGRATE_HEADING('\n🔐 Syncing RBAC Permissions...\n'))
+        self.stdout.write(self.style.MIGRATE_HEADING('\n[*] Syncing RBAC Permissions...\n'))
         
         created = 0
         updated = 0
@@ -58,48 +58,58 @@ class Command(BaseCommand):
                 if was_created:
                     created += 1
                     if verbose:
-                        self.stdout.write(self.style.SUCCESS(f'   ✅ Created: {codename}'))
+                        self.stdout.write(self.style.SUCCESS(f'   [+] Created: {codename}'))
                 else:
                     updated += 1
+        # Clean up database permissions not present in the registry
+        all_registry_codenames = []
+        for mod, mod_data in PERMISSION_REGISTRY.items():
+            for perm_tuple in mod_data['permissions']:
+                all_registry_codenames.append(perm_tuple[0])
+        
+        deleted_count, _ = Permission.objects.exclude(codename__in=all_registry_codenames).delete()
+        if deleted_count > 0:
+            self.stdout.write(self.style.WARNING(f'Cleaned up {deleted_count} obsolete permissions from database\n'))
         
         self.stdout.write(
-            self.style.SUCCESS(f'\n✅ Permissions synced: {created} created, {updated} updated, {created + updated} total')
+            self.style.SUCCESS(f'\n[+] Permissions synced: {created} created, {updated} updated, {created + updated} total')
         )
         
         if create_roles:
-            self.stdout.write(self.style.MIGRATE_HEADING('\n👤 Creating System Roles...\n'))
+            self.stdout.write(self.style.MIGRATE_HEADING('\n[*] Creating System Roles...\n'))
             
             roles_created = 0
+            roles_updated = 0
             for template_key, template in DEFAULT_ROLE_TEMPLATES.items():
-                if Role.objects.filter(
+                role, created_role = Role.objects.get_or_create(
                     name=template['name'],
                     school__isnull=True,
-                    is_system_role=True
-                ).exists():
-                    if verbose:
-                        self.stdout.write(f"   ⏭️  {template['name']} already exists")
-                    continue
-                
-                role = Role.objects.create(
-                    name=template['name'],
-                    description=template['description'],
-                    role_type=template_key,
-                    hierarchy_level=template['hierarchy_level'],
                     is_system_role=True,
-                    school=None,
+                    defaults={
+                        'description': template['description'],
+                        'role_type': template_key,
+                        'hierarchy_level': template['hierarchy_level'],
+                    }
                 )
                 
                 expanded_perms = expand_wildcard_permissions(template['permissions'])
                 permissions = Permission.objects.filter(codename__in=expanded_perms)
                 role.permissions.set(permissions)
                 
-                roles_created += 1
-                self.stdout.write(
-                    self.style.SUCCESS(f'   ✅ Created: {template["name"]} ({permissions.count()} permissions)')
-                )
+                if created_role:
+                    roles_created += 1
+                    self.stdout.write(
+                        self.style.SUCCESS(f'   [+] Created: {template["name"]} ({permissions.count()} permissions)')
+                    )
+                else:
+                    roles_updated += 1
+                    if verbose:
+                        self.stdout.write(
+                            self.style.SUCCESS(f'   [*] Updated: {template["name"]} ({permissions.count()} permissions)')
+                        )
             
             self.stdout.write(
-                self.style.SUCCESS(f'\n✅ Roles created: {roles_created}')
+                self.style.SUCCESS(f'\n[+] Roles processed: {roles_created} created, {roles_updated} updated')
             )
         
-        self.stdout.write(self.style.SUCCESS('\n🎉 RBAC sync complete!\n'))
+        self.stdout.write(self.style.SUCCESS('\n[+] RBAC sync complete!\n'))

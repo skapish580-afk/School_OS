@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { FileText, DollarSign, CreditCard, ArrowLeft, Plus, Calendar, User, AlertCircle } from 'lucide-react'
+import { FileText, DollarSign, CreditCard, ArrowLeft, Plus, Calendar, User, AlertCircle, X, Trash2 } from 'lucide-react'
 import Modal from '@/components/Modal'
+import api from '@/lib/api'
+import { usePermissionContext } from '@/lib/rbac-context'
+
 
 interface Transaction {
   id: number
@@ -40,6 +43,37 @@ export default function InvoiceDetailPage() {
     reference: ''
   })
   const [saving, setSaving] = useState(false)
+  const [breakdowns, setBreakdowns] = useState<Array<{ amount: string; particulars: string }>>([{ amount: '', particulars: '' }])
+
+  const { hasPermission, isAdmin } = usePermissionContext();
+  const canDeleteInvoice = isAdmin || hasPermission('finance.generate_invoice');
+
+  const openPaymentModal = () => {
+    if (!invoice) return;
+    setPaymentForm({
+      amount: invoice.balance_due.toString(),
+      mode: 'CASH',
+      reference: ''
+    });
+    setBreakdowns([{ amount: '', particulars: '' }]);
+    setShowPaymentModal(true);
+  };
+
+  const handleAddBreakdown = () => {
+    setBreakdowns([...breakdowns, { amount: '', particulars: '' }]);
+  };
+
+  const handleRemoveBreakdown = (index: number) => {
+    const next = [...breakdowns];
+    next.splice(index, 1);
+    setBreakdowns(next);
+  };
+
+  const handleUpdateBreakdown = (index: number, key: 'amount' | 'particulars', value: string) => {
+    const next = [...breakdowns];
+    next[index][key] = value;
+    setBreakdowns(next);
+  };
 
   useEffect(() => {
     fetchInvoice()
@@ -47,17 +81,30 @@ export default function InvoiceDetailPage() {
 
   const fetchInvoice = async () => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/finance/invoices/${params.id}/`)
-      if (res.ok) {
-        const data = await res.json()
-        setInvoice(data)
-      }
+      const res = await api.get(`/finance/invoices/${params.id}/`)
+      setInvoice(res.data)
     } catch (error) {
       console.error('Error fetching invoice:', error)
     } finally {
       setLoading(false)
     }
   }
+
+  const handleDeleteInvoice = async () => {
+    if (!invoice) return;
+    if (!window.confirm(`Are you sure you want to delete Invoice ${invoice.invoice_number}? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      await api.delete(`/finance/invoices/${invoice.id}/`);
+      alert('Invoice deleted successfully!');
+      router.push('/dashboard/finance');
+    } catch (err: any) {
+      console.error('Failed to delete invoice', err);
+      const msg = err?.response?.data?.detail || err?.response?.data?.error || 'Failed to delete invoice.';
+      alert(msg);
+    }
+  };
 
   const handleRecordPayment = async () => {
     if (!invoice) return
@@ -68,35 +115,42 @@ export default function InvoiceDetailPage() {
       return
     }
 
-    if (amount > invoice.balance_due) {
-      alert(`Payment amount cannot exceed balance due (${formatCurrency(invoice.balance_due)})`)
-      return
+    const extraAmount = amount - invoice.balance_due;
+    let notes = '';
+    if (extraAmount > 0) {
+      const validBreakdowns = breakdowns.filter(b => b.amount && b.particulars);
+      if (validBreakdowns.length > 0) {
+        notes = "Record of extra amount collected:\n" + 
+                validBreakdowns.map(b => `- Particulars: ${b.particulars}, Amount: ₹${parseFloat(b.amount).toLocaleString()}`).join('\n');
+      }
     }
+
+    const payload = {
+      ...paymentForm,
+      notes: notes
+    };
 
     setSaving(true)
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/finance/invoices/${params.id}/record_payment/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(paymentForm)
-      })
-
-      if (res.ok) {
-        alert('Payment recorded successfully!')
-        setShowPaymentModal(false)
-        setPaymentForm({ amount: '', mode: 'CASH', reference: '' })
-        fetchInvoice()
-      } else {
-        const error = await res.json()
-        alert(`Error: ${error.error || 'Failed to record payment'}`)
-      }
-    } catch (error) {
+      await api.post(`/finance/invoices/${params.id}/record_payment/`, payload)
+      alert('Payment recorded successfully!')
+      setShowPaymentModal(false)
+      setPaymentForm({ amount: '', mode: 'CASH', reference: '' })
+      setBreakdowns([{ amount: '', particulars: '' }])
+      fetchInvoice()
+    } catch (error: any) {
       console.error('Error recording payment:', error)
-      alert('Failed to record payment')
+      const msg = error?.response?.data?.error || 'Failed to record payment';
+      alert(`Error: ${msg}`)
     } finally {
       setSaving(false)
     }
   }
+
+
+  const modalExtraAmount = invoice ? parseFloat(paymentForm.amount || '0') - invoice.balance_due : 0;
+  const modalTotalAllocated = modalExtraAmount > 0 ? breakdowns.reduce((sum, b) => sum + (parseFloat(b.amount || '0') || 0), 0) : 0;
+  const isPaymentSubmitDisabled = saving || !paymentForm.amount || (modalExtraAmount > 0 && Math.abs(modalTotalAllocated - modalExtraAmount) >= 0.01);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -176,15 +230,26 @@ export default function InvoiceDetailPage() {
           </span>
           {invoice.status !== 'PAID' && (
             <button
-              onClick={() => setShowPaymentModal(true)}
+              onClick={openPaymentModal}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Plus className="w-5 h-5" />
               Record Payment
             </button>
           )}
+          {canDeleteInvoice && (
+            <button
+              onClick={handleDeleteInvoice}
+              className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded-lg transition-colors font-medium text-sm"
+              title="Delete Invoice"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Invoice
+            </button>
+          )}
         </div>
       </div>
+
 
       {/* Alert for overdue */}
       {isOverdue && (
@@ -302,7 +367,7 @@ export default function InvoiceDetailPage() {
         onClose={() => setShowPaymentModal(false)}
         title="Record Payment"
       >
-        <div className="space-y-4">
+        <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Amount *</label>
             <input
@@ -344,6 +409,83 @@ export default function InvoiceDetailPage() {
             />
           </div>
 
+          {/* Extra Amount Breakdown Panel */}
+          {modalExtraAmount > 0 && (
+            <div className="bg-amber-50/50 border border-amber-200 p-4 rounded-xl space-y-3">
+              <p className="text-sm font-semibold text-amber-800">
+                Record what the extra amount collected represents.
+              </p>
+              <div className="text-xs text-amber-700 bg-amber-100/50 p-2 rounded-lg mb-2 flex justify-between">
+                <span>Extra Amount: <strong>₹{modalExtraAmount.toLocaleString()}</strong></span>
+                <span>Allocated: <strong className={modalTotalAllocated > modalExtraAmount ? "text-red-600 font-bold" : "text-amber-800"}>₹{modalTotalAllocated.toLocaleString()}</strong></span>
+              </div>
+              
+              <div className="max-h-48 overflow-y-auto space-y-2">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-amber-200 text-amber-800 uppercase tracking-wider font-bold">
+                      <th className="pb-2 w-1/3">Amount</th>
+                      <th className="pb-2 w-7/12">Particulars</th>
+                      <th className="pb-2 w-1/12"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {breakdowns.map((b, index) => (
+                      <tr key={index} className="border-b border-amber-100/30">
+                        <td className="py-2 pr-2">
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400">₹</span>
+                            <input
+                              type="number"
+                              placeholder="0"
+                              className="w-full pl-5 pr-1 py-1.5 bg-white border border-gray-200 rounded outline-none focus:ring-1 focus:ring-amber-500"
+                              value={b.amount}
+                              onChange={e => handleUpdateBreakdown(index, 'amount', e.target.value)}
+                            />
+                          </div>
+                        </td>
+                        <td className="py-2 pr-2">
+                          <input
+                            type="text"
+                            placeholder="Reason / Particulars"
+                            className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded outline-none focus:ring-1 focus:ring-amber-500"
+                            value={b.particulars}
+                            onChange={e => handleUpdateBreakdown(index, 'particulars', e.target.value)}
+                          />
+                        </td>
+                        <td className="py-2 text-right">
+                          {breakdowns.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveBreakdown(index)}
+                              className="text-red-500 hover:text-red-700 transition-colors p-1"
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddBreakdown}
+                className="text-xs font-bold text-amber-700 hover:text-amber-800 hover:underline flex items-center gap-1 mt-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add more breakdowns
+              </button>
+              
+              {Math.abs(modalTotalAllocated - modalExtraAmount) >= 0.01 && (
+                <p className="text-xs text-red-600 font-medium">
+                  Total breakdown amounts must exactly equal the extra amount of ₹{modalExtraAmount.toLocaleString()} (Current sum: ₹{modalTotalAllocated.toLocaleString()}).
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-3 pt-4">
             <button
               onClick={() => setShowPaymentModal(false)}
@@ -353,7 +495,7 @@ export default function InvoiceDetailPage() {
             </button>
             <button
               onClick={handleRecordPayment}
-              disabled={saving}
+              disabled={isPaymentSubmitDisabled}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {saving ? 'Recording...' : 'Record Payment'}

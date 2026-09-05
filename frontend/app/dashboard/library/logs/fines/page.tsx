@@ -4,9 +4,12 @@ import { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import { Banknote, Search, ArrowLeft, Loader2, User, Book, CreditCard, CheckCircle, Clock } from 'lucide-react';
 import Link from 'next/link';
-import { toast } from 'sonner';
+import { usePermissionContext } from '@/lib/rbac-context';
 
 export default function FinesLogPage() {
+  const { hasPermission, isAdmin } = usePermissionContext();
+  const canView = isAdmin || hasPermission('library.view_fines_log') || hasPermission('library.edit_fines_log') || hasPermission('library.manage_fines');
+  const canEdit = isAdmin || hasPermission('library.edit_fines_log') || hasPermission('library.manage_fines');
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -161,7 +164,7 @@ export default function FinesLogPage() {
                   )}
                 </td>
                 <td className="px-6 py-4 text-right">
-                  {!log.fine_collected && (
+                  {!log.fine_collected && canEdit && (
                     <button 
                       onClick={() => handleCollectFine(log.id, parseFloat(log.calculated_fine))}
                       className="bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-green-700 transition shadow-md shadow-green-100 flex items-center gap-2 ml-auto"

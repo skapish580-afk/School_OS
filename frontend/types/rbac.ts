@@ -10,7 +10,8 @@ export type PermissionModule =
   | 'students' | 'teachers' | 'academics' | 'attendance' 
   | 'finance' | 'health' | 'discipline' | 'gatepass' 
   | 'achievements' | 'transfers' | 'enrollments' 
-  | 'reports' | 'settings' | 'users' | 'roles';
+  | 'reports' | 'settings' | 'users' | 'roles'
+  | 'transport' | 'library' | 'assets' | 'dashboard' | 'calendar';
 
 // Permission interface
 export interface Permission {
@@ -52,14 +53,18 @@ export interface Role {
     id: string;
     name: string;
   } | null;
-  created_by: {
+  created_by: string | {
     id: string;
-    email: string;
-    first_name: string;
-    last_name: string;
+    email?: string;
+    first_name?: string;
+    last_name?: string;
+    full_name?: string;
   } | null;
+  created_by_name?: string | null;
   created_at: string;
   updated_at: string;
+  username?: string | null;
+  plain_password?: string | null;
 }
 
 // Role with permissions (detailed view)
@@ -67,6 +72,12 @@ export interface RoleWithPermissions extends Role {
   permissions: Permission[];
   permission_ids: string[];
   user_count: number;
+  timetable_grade_scopes?: string[];
+  syllabus_subject_scopes?: string[];
+  exam_subject_scopes?: string[];
+  exam_type_scopes?: string[];
+  marks_subject_scopes?: string[];
+  attendance_section_scopes?: string[];
 }
 
 // User role assignment
@@ -78,6 +89,7 @@ export interface UserRole {
     first_name: string;
     last_name: string;
     user_type: string;
+    teacher_type?: 'TEACHING' | 'NON_TEACHING' | null;
   };
   role: Role;
   school: {
@@ -96,14 +108,17 @@ export interface UserRole {
     id: string;
     name: string;
   } | null;
+  grade_name?: string | null;
   section_scope: {
     id: string;
     name: string;
   } | null;
+  section_name?: string | null;
   subject_scope: {
     id: string;
     name: string;
   } | null;
+  subject_name?: string | null;
 }
 
 // Staff with roles
@@ -115,6 +130,7 @@ export interface StaffWithRoles {
   user_type: string;
   roles: Role[];
   is_active: boolean;
+  teacher_type?: 'TEACHING' | 'NON_TEACHING' | null;
 }
 
 // Role template
@@ -157,6 +173,8 @@ export interface CurrentUserPermissions {
   roles: Role[];
   permissions: string[];
   permissions_by_module: Record<string, string[]>;
+  grade_scopes?: string[];
+  exam_type_scopes?: string[];
 }
 
 // Create/Update role payload
@@ -166,6 +184,13 @@ export interface CreateRolePayload {
   role_type?: RoleType;
   hierarchy_level?: number;
   permission_ids?: string[];
+  timetable_grade_scopes?: string[];
+  syllabus_subject_scopes?: string[];
+  exam_subject_scopes?: string[];
+  exam_type_scopes?: string[];
+  marks_subject_scopes?: string[];
+  username?: string;
+  password?: string;
 }
 
 export interface UpdateRolePayload {
@@ -174,6 +199,14 @@ export interface UpdateRolePayload {
   role_type?: RoleType;
   hierarchy_level?: number;
   is_active?: boolean;
+  timetable_grade_scopes?: string[];
+  syllabus_subject_scopes?: string[];
+  exam_subject_scopes?: string[];
+  exam_type_scopes?: string[];
+  marks_subject_scopes?: string[];
+  attendance_section_scopes?: string[];
+  username?: string;
+  password?: string;
 }
 
 // Bulk permission update
@@ -217,6 +250,11 @@ export const MODULE_ICONS: Record<string, string> = {
   settings: 'Settings',
   users: 'UserCog',
   roles: 'Shield',
+  transport: 'Bus',
+  library: 'Book',
+  assets: 'Package',
+  dashboard: 'LayoutDashboard',
+  calendar: 'Calendar',
 };
 
 export const MODULE_LABELS: Record<string, string> = {
@@ -235,6 +273,11 @@ export const MODULE_LABELS: Record<string, string> = {
   settings: 'Settings',
   users: 'User Management',
   roles: 'Role Management',
+  transport: 'Transport',
+  library: 'Library',
+  assets: 'Assets',
+  dashboard: 'Dashboard',
+  calendar: 'Calendar',
 };
 
 export const ACTION_COLORS: Record<PermissionAction, string> = {

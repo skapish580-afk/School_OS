@@ -12,6 +12,7 @@ FEATURES = [
     ('ATTENDANCE', 'Attendance System', 'CORE'),
     ('ACADEMICS', 'Academic Management', 'CORE'),
     ('TEACHERS', 'Teacher Management', 'CORE'),
+    ('RESULTS', 'Results Management', 'CORE'),
     ('FINANCE', 'Finance & Fees', 'STANDARD'),
     ('HEALTH', 'Health & Infirmary', 'STANDARD'),
     ('GATE_PASS', 'Secure Gate Pass', 'STANDARD'),

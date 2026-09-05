@@ -483,11 +483,18 @@ class StudentResultViewSet(viewsets.ModelViewSet):
                             student_id=result_data['student_id']
                         )
                         
+                        from apps.accounts.permission_utils import can_user_edit_object_by_hierarchy
+                        allowed, reason = can_user_edit_object_by_hierarchy(user, result)
+                        if not allowed:
+                            errors.append(f"Hierarchy error for student {result_data['student_id']}: {reason}")
+                            continue
+
                         # Update marks
                         result.marks_obtained = result_data.get('marks_obtained')
                         result.remarks = result_data.get('remarks', '')
                         result.save()
                         updated_count += 1
+
                     
                     except StudentResult.DoesNotExist:
                         errors.append(f"Student {result_data['student_id']} not found")

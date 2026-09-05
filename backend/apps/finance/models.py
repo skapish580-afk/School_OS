@@ -269,6 +269,10 @@ class StudentFeeAssignment(models.Model):
             academic_year=self.academic_year
         )
         
+        desc = f"Annual Fee Assignment - {self.fee_structure.name if self.fee_structure else 'Manual'}"
+        if self.special_discount > 0 and self.discount_reason:
+            desc += f" ({self.discount_reason})"
+
         # Use update_or_create to prevent duplicate charges and reflect updates
         FeeLedgerEntry.objects.update_or_create(
             ledger=ledger,
@@ -276,7 +280,7 @@ class StudentFeeAssignment(models.Model):
             description__startswith="Annual Fee Assignment",
             defaults={
                 'date': self.created_at.date() if self.created_at else timezone.now().date(),
-                'description': f"Annual Fee Assignment - {self.fee_structure.name if self.fee_structure else 'Manual'}",
+                'description': desc,
                 'amount': self.net_payable,
                 'created_by': self.created_by
             }
@@ -476,22 +480,28 @@ class Invoice(models.Model):
             items_total = sum(item.net_amount for item in self.items.all())
             if items_total > 0:
                 self.subtotal = items_total
-                self.total_amount = self.subtotal - self.discount_amount + self.late_fee
+        
+        # If there are no items, but total_amount is set and subtotal is 0, initialize subtotal
+        if not self.subtotal and self.total_amount:
+            self.subtotal = self.total_amount
+            
+        # Recalculate total_amount based on subtotal, discount_amount, and late_fee
+        if self.subtotal:
+            self.total_amount = self.subtotal - self.discount_amount + self.late_fee
         
         # Auto-update status based on payment
-        if self.paid_amount >= self.total_amount:
-            self.status = 'PAID'
-            self.is_locked = True
-            if not self.paid_date:
-                self.paid_date = timezone.now().date()
-        elif self.paid_amount > 0:
-            self.status = 'PARTIAL'
-        elif self.due_date and self.due_date < timezone.now().date() and self.status in ['UNPAID', 'PARTIAL']:
-            # If student has a scheduled payment plan, use PARTIAL instead of OVERDUE
-            if self.fee_assignment:
+        if self.status not in ['DRAFT', 'CANCELLED']:
+            if self.paid_amount >= self.total_amount:
+                self.status = 'PAID'
+                self.is_locked = True
+                if not self.paid_date:
+                    self.paid_date = timezone.now().date()
+            elif self.due_date and self.due_date < timezone.now().date():
+                self.status = 'OVERDUE'
+            elif self.paid_amount > 0:
                 self.status = 'PARTIAL'
             else:
-                self.status = 'OVERDUE'
+                self.status = 'UNPAID'
             
         super().save(*args, **kwargs)
         
@@ -519,15 +529,31 @@ class Invoice(models.Model):
         if not self.installment:
             entry, created = FeeLedgerEntry.objects.update_or_create(
                 invoice=self,
+                entry_type='CHARGE',
                 defaults={
                     'ledger': self.ledger,
-                    'entry_type': 'CHARGE',
                     'date': self.invoice_date,
                     'description': f"Invoice {self.invoice_number}",
                     'amount': self.total_amount,
                     'created_by': self.created_by
                 }
             )
+            
+        # Sync late fee if applicable
+        if self.late_fee > 0:
+            FeeLedgerEntry.objects.update_or_create(
+                invoice=self,
+                entry_type='FINE',
+                defaults={
+                    'ledger': self.ledger,
+                    'date': timezone.now().date(),
+                    'description': f"Late fee for Invoice {self.invoice_number}",
+                    'amount': self.late_fee,
+                    'created_by': self.created_by
+                }
+            )
+        else:
+            FeeLedgerEntry.objects.filter(invoice=self, entry_type='FINE').delete()
             
         # Recalculate ledger totals
         self.ledger.recalculate()
@@ -672,7 +698,6 @@ class Transaction(models.Model):
             academic_year=academic_year
         )
         
-        # Create or update ledger entry for this transaction
         FeeLedgerEntry.objects.update_or_create(
             transaction=self,
             defaults={
@@ -682,7 +707,8 @@ class Transaction(models.Model):
                 'description': f"Payment Received - {self.receipt_number}",
                 'amount': self.amount,
                 'created_by': self.collected_by,
-                'reference_number': self.receipt_number
+                'reference_number': self.reference_number if self.reference_number else self.receipt_number,
+                'notes': self.notes
             }
         )
         
@@ -781,8 +807,8 @@ class FeeLedger(models.Model):
         return f"{self.student.suid} - {self.academic_year} - Balance: ₹{self.current_balance}"
     
     def recalculate(self):
-        """Recalculate all totals from ledger entries"""
-        entries = self.entries.all()
+        """Recalculate all totals and running balances from ledger entries"""
+        entries = list(self.entries.order_by('date', 'created_at'))
         
         self.total_charges = sum(e.amount for e in entries if e.entry_type == 'CHARGE')
         self.total_payments = sum(e.amount for e in entries if e.entry_type == 'PAYMENT')
@@ -799,6 +825,23 @@ class FeeLedger(models.Model):
         
         self.is_cleared = self.current_balance <= 0
         self.save()
+
+        # Calculate running balance (balance_after) for each entry in chronological order
+        running = self.opening_balance
+        to_update = []
+        for entry in entries:
+            if entry.entry_type in ('CHARGE', 'FINE', 'ADJUSTMENT', 'CARRIED_FORWARD'):
+                running += entry.amount
+            elif entry.entry_type in ('PAYMENT', 'DISCOUNT', 'REFUND'):
+                running -= entry.amount
+            
+            if entry.balance_after != running:
+                entry.balance_after = running
+                to_update.append(entry)
+
+        if to_update:
+            FeeLedgerEntry.objects.bulk_update(to_update, ['balance_after'])
+
         return self.current_balance
 
 
@@ -853,6 +896,8 @@ class FeeLedgerEntry(models.Model):
     
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
+        if self.ledger_id:
+            self.ledger.recalculate()
 
 # ============================================================
 # 11. SIGNAL HANDLERS FOR CASCADING UPDATES
@@ -1157,3 +1202,37 @@ class InvoiceItem(models.Model):
         self.total_price = self.unit_price * self.quantity
         self.net_amount = self.total_price - self.discount_amount
         super().save(*args, **kwargs)
+
+
+# ============================================================
+# SALARY DEDUCTION
+# ============================================================
+
+class SalaryDeduction(models.Model):
+    """
+    Records a salary deduction for a staff member (teaching or non-teaching)
+    for a specific month. Each deduction is scoped to one month.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey('schools.School', on_delete=models.CASCADE, related_name='salary_deductions')
+    teacher = models.ForeignKey('teachers.Teacher', on_delete=models.CASCADE, related_name='salary_deductions')
+
+    # The month this deduction applies to (stored as YYYY-MM)
+    month = models.CharField(max_length=7, help_text="Month in YYYY-MM format, e.g. 2026-07")
+
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    description = models.TextField(help_text="Reason for the deduction")
+
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='salary_deductions_recorded'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Deduction ₹{self.amount} for {self.teacher} ({self.month})"

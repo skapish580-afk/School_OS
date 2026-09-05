@@ -55,10 +55,10 @@ export default function SimpleOwnerLogin() {
             // Step 3: Redirect based on user type
             if (userData.user_type === 'PLATFORM_ADMIN') {
                 console.log('5. Redirecting to /owner...');
-                router.push('/owner');
+                window.location.href = '/owner';
             } else {
                 console.log('5. Not a platform admin, redirecting to dashboard');
-                router.push('/dashboard');
+                window.location.href = '/dashboard';
             }
 
         } catch (err: any) {

@@ -91,7 +91,7 @@ export function usePermissionGroups() {
 /**
  * Hook to fetch all roles
  */
-export function useRoles(filters?: { is_active?: boolean; role_type?: string; search?: string }) {
+export function useRoles(filters?: { is_active?: boolean; role_type?: string; search?: string; for_assignment?: boolean }) {
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +103,7 @@ export function useRoles(filters?: { is_active?: boolean; role_type?: string; se
       if (filters?.is_active !== undefined) params.append('is_active', String(filters.is_active));
       if (filters?.role_type) params.append('role_type', filters.role_type);
       if (filters?.search) params.append('search', filters.search);
+      if (filters?.for_assignment !== undefined) params.append('for_assignment', String(filters.for_assignment));
       
       const response = await api.get(`${RBAC_BASE}/roles/?${params.toString()}`);
       setRoles(response.data);
@@ -112,7 +113,7 @@ export function useRoles(filters?: { is_active?: boolean; role_type?: string; se
     } finally {
       setLoading(false);
     }
-  }, [filters?.is_active, filters?.role_type, filters?.search]);
+  }, [filters?.is_active, filters?.role_type, filters?.search, filters?.for_assignment]);
 
   useEffect(() => {
     fetchRoles();

@@ -9,7 +9,7 @@ class DisciplineRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = DisciplineRecord
         fields = '__all__'
-        read_only_fields = ['reported_by', 'incident_date', 'points_deducted']
+        read_only_fields = ['reported_by', 'incident_date']
 
 
 class KarmaActivitySerializer(serializers.ModelSerializer):
@@ -21,7 +21,7 @@ class KarmaActivitySerializer(serializers.ModelSerializer):
         model = KarmaActivity
         fields = [
             'id', 'student', 'student_name', 'student_suid',
-            'awarded_by', 'awarded_by_name', 'title', 'points', 'date'
+            'awarded_by', 'awarded_by_name', 'title', 'points', 'description', 'date', 'grade'
         ]
         read_only_fields = ['id', 'date', 'awarded_by']
     

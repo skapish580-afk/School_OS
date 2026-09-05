@@ -18,13 +18,25 @@ class SchoolViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
     school_field = 'id'
 
 
+class IsSchoolSettingsAdminOrReadOnly(permissions.BasePermission):
+    """
+    Allows read-only access to role users, full access to platform/school admins.
+    """
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.user_type == 'ROLE':
+            return request.method in permissions.SAFE_METHODS
+        return True
+
+
 class SchoolSettingsViewSet(viewsets.ModelViewSet):
     """
     API endpoint for school settings
     """
     queryset = SchoolSettings.objects.all()
     serializer_class = SchoolSettingsSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsSchoolSettingsAdminOrReadOnly]
     
     def get_queryset(self):
         # Filter by user's school (assuming user has school relationship)
@@ -37,7 +49,9 @@ class SchoolSettingsViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def my_settings(self, request):
         """
-        Get settings for current user's school
+        Get settings for current user's school.
+        Also auto-syncs AcademicYear DB records on every read so that when the
+        academic year rolls over the new year becomes ACTIVE without any manual action.
         """
         from apps.core.school_isolation import get_user_school
         school = get_user_school(request.user)
@@ -50,8 +64,18 @@ class SchoolSettingsViewSet(viewsets.ModelViewSet):
             return Response({'error': 'No school found'}, status=status.HTTP_404_NOT_FOUND)
         
         settings, created = SchoolSettings.objects.get_or_create(school=school)
+
+        # Auto-sync academic year statuses so the DB reflects today's date
+        # (handles automatic year rollover without any manual settings save)
+        try:
+            from apps.schools.models_settings import sync_school_academic_years
+            sync_school_academic_years(school)
+        except Exception:
+            pass
+
         serializer = self.get_serializer(settings)
         return Response(serializer.data)
+
     
     @action(detail=False, methods=['patch'])
     def update_my_settings(self, request):
@@ -69,6 +93,16 @@ class SchoolSettingsViewSet(viewsets.ModelViewSet):
         if not school:
             return Response({'error': 'No school found'}, status=status.HTTP_404_NOT_FOUND)
         
+        # Handle school logo upload/removal
+        if 'school_logo' in request.data:
+            logo_file = request.data['school_logo']
+            if logo_file == '' or logo_file == 'null':
+                school.logo = None
+                school.save()
+            elif not isinstance(logo_file, str):
+                school.logo = logo_file
+                school.save()
+
         settings, created = SchoolSettings.objects.get_or_create(school=school)
         serializer = self.get_serializer(settings, data=request.data, partial=True, context={'request': request})
         serializer.is_valid(raise_exception=True)
@@ -109,7 +143,12 @@ class SchoolSettingsViewSet(viewsets.ModelViewSet):
                     "sub_features": config.config  # Uses the @property helper
                 }
 
-        # Ensure CORE features are always enabled if no explicit config exists
+        # Ensure CORE and ALWAYS-ON features are enabled if no explicit config exists
+        default_always_on = ['REPORTS', 'COMMUNITY', 'AI_ANALYTICS']
+        for code in default_always_on:
+            if code not in configured_codes:
+                features_map[code] = {"enabled": True, "sub_features": {}}
+
         core_features = Feature.objects.filter(category='CORE')
         for core in core_features:
             if core.code not in configured_codes:

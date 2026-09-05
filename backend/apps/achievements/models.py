@@ -8,6 +8,9 @@ class Achievement(models.Model):
     Positive recognition: Awards, Sports Medals, Olympiad Ranks.
     """
     CATEGORY_CHOICES = [
+        ('CURRICULAR', 'Curricular'),
+        ('NON_CURRICULAR', 'Non-curricular'),
+        ('EXTRA_CURRICULAR', 'Extra-curricular'),
         ('ACADEMIC', 'Academic'),
         ('SPORTS', 'Sports'),
         ('CULTURAL', 'Cultural/Arts'),
@@ -18,12 +21,18 @@ class Achievement(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     student = models.ForeignKey(StudentEnrollment, on_delete=models.CASCADE, related_name='achievements')
     
-    title = models.CharField(max_length=200) # e.g. "Gold Medal - 100m Dash"
+    title = models.CharField(max_length=200, blank=True, default='Achievement') # e.g. "Gold Medal - 100m Dash"
     description = models.TextField(blank=True)
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
     date_awarded = models.DateField()
     
-    certificate_image = models.ImageField(upload_to='achievements/', blank=True, null=True)
+    certificate_image = models.FileField(upload_to='achievements/', blank=True, null=True)
+    grade = models.CharField(max_length=10, blank=True, default='')
+
+    def save(self, *args, **kwargs):
+        if not self.grade and self.student:
+            self.grade = self.student.grade
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.title} - {self.student.student.user.full_name}"
@@ -90,7 +99,7 @@ class StudentYearlyAward(models.Model):
     cash_prize_currency = models.CharField(max_length=10, default='INR')
     
     # Certificate/Evidence
-    certificate_image = models.ImageField(upload_to='yearly_awards/', blank=True, null=True)
+    certificate_image = models.FileField(upload_to='yearly_awards/', blank=True, null=True)
     
     # Event details
     event_name = models.CharField(max_length=200, blank=True, null=True)

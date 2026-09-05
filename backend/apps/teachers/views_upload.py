@@ -11,7 +11,12 @@ from .serializers import TeacherSerializer
 @permission_classes([IsAuthenticated])
 @parser_classes([MultiPartParser, FormParser])
 def upload_photo(request):
-    """Upload teacher photo separately"""
+    """Upload teacher photo separately - Restricted to Admins"""
+    if request.user.user_type not in ['PLATFORM_ADMIN', 'SCHOOL_ADMIN', 'ADMIN']:
+        return Response(
+            {'detail': 'Profile photo is view-only and can only be updated by the School Admin in the Teachers module.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
     try:
         teacher = Teacher.objects.get(user=request.user)
         

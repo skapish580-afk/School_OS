@@ -1,7 +1,9 @@
+from apps.core.school_isolation import SchoolIsolationMixin
 from django.shortcuts import render
 from django.http import HttpResponse
 import csv
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.db import transaction
 from django.db.models import Sum, Count, Q, F, DecimalField
 from django.db.models.functions import Coalesce
@@ -45,7 +47,8 @@ from apps.enrollments.models import StudentEnrollment
 # FEE SCHEDULE VIEWSET
 # ============================================================
 
-class FeeScheduleViewSet(viewsets.ModelViewSet):
+class FeeScheduleViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
+    school_field = 'school'
     """
     API for managing fee payment schedules (Quarterly, Half-Yearly, etc.)
     """
@@ -57,7 +60,7 @@ class FeeScheduleViewSet(viewsets.ModelViewSet):
     rbac_resource = 'fee_schedule'
     
     def get_queryset(self):
-        queryset = FeeSchedule.objects.all()
+        queryset = super().get_queryset()
         school_id = self.request.query_params.get('school')
         if school_id:
             queryset = queryset.filter(school_id=school_id)
@@ -70,6 +73,10 @@ class FeeScheduleViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             return FeeScheduleListSerializer
         return FeeScheduleSerializer
+        
+    def perform_create(self, serializer):
+        school = getattr(self.request.user, 'school', None)
+        serializer.save(school=school)
     
     @action(detail=True, methods=['post'])
     def set_default(self, request, pk=None):
@@ -84,7 +91,8 @@ class FeeScheduleViewSet(viewsets.ModelViewSet):
 # FEE STRUCTURE VIEWSET
 # ============================================================
 
-class FeeStructureViewSet(viewsets.ModelViewSet):
+class FeeStructureViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
+    school_field = 'school'
     """
     API for managing grade-wise fee structures
     """
@@ -94,9 +102,19 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
     
     rbac_module = 'finance'
     rbac_resource = 'fee_structure'
-    
+    rbac_action_permissions = {
+        'list':           'finance.view_fee_structure',
+        'retrieve':       'finance.view_fee_structure',
+        'create':         'finance.edit_fee_structure',
+        'update':         'finance.edit_fee_structure',
+        'partial_update': 'finance.edit_fee_structure',
+        'destroy':        'finance.edit_fee_structure',
+        'apply_hike':     'finance.edit_fee_structure',
+        'copy_to_next_year': 'finance.edit_fee_structure',
+    }
+
     def get_queryset(self):
-        queryset = FeeStructure.objects.all()
+        queryset = super().get_queryset()
         school_id = self.request.query_params.get('school')
         if school_id:
             queryset = queryset.filter(school_id=school_id)
@@ -188,7 +206,8 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
 # STUDENT FEE ASSIGNMENT VIEWSET
 # ============================================================
 
-class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
+class StudentFeeAssignmentViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
+    school_field = 'student__school'
     """
     API for managing individual student fee assignments
     """
@@ -198,9 +217,20 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
     
     rbac_module = 'finance'
     rbac_resource = 'fee_assignment'
-    
+    rbac_action_permissions = {
+        'list':                   ['finance.view_fee_assignment', 'finance.bulk_assign', 'finance.allocate_plan'],
+        'retrieve':               ['finance.view_fee_assignment', 'finance.bulk_assign', 'finance.allocate_plan'],
+        'create':                 'finance.edit_fee_assignment',
+        'update':                 'finance.edit_fee_assignment',
+        'partial_update':         'finance.edit_fee_assignment',
+        'destroy':                'finance.edit_fee_assignment',
+        'bulk_assign':            ['finance.edit_fee_assignment', 'finance.bulk_assign'],
+        'bulk_allocate_schedule': ['finance.edit_fee_assignment', 'finance.allocate_plan'],
+        'record_reimbursement':   ['finance.edit_ledger', 'finance.edit_fee_assignment'],
+    }
+
     def get_queryset(self):
-        queryset = StudentFeeAssignment.objects.select_related(
+        queryset = super().get_queryset().select_related(
             'student', 'student__user', 'fee_structure', 'fee_schedule'
         ).prefetch_related('installments')
         
@@ -227,8 +257,49 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
             return StudentFeeAssignmentListSerializer
         return StudentFeeAssignmentSerializer
     
+    def destroy(self, request, *args, **kwargs):
+        assignment = self.get_object()
+        student = assignment.student
+        academic_year = assignment.academic_year
+
+        from apps.finance.models import FeeLedgerEntry, Invoice, FeeLedger
+        # 1. Delete uncollected invoices associated with assignment
+        Invoice.objects.filter(
+            student=student,
+            academic_year=academic_year,
+            fee_assignment=assignment
+        ).exclude(status='PAID').delete()
+
+        # 2. Delete charge entries in FeeLedgerEntry
+        FeeLedgerEntry.objects.filter(
+            ledger__student=student,
+            ledger__academic_year=academic_year,
+            entry_type='CHARGE',
+            description__startswith="Annual Fee Assignment"
+        ).delete()
+
+        # 3. Delete installments
+        assignment.installments.all().delete()
+
+        # 4. Delete assignment instance
+        res = super().destroy(request, *args, **kwargs)
+
+        # 5. Recalculate ledger
+        ledger = FeeLedger.objects.filter(student=student, academic_year=academic_year).first()
+        if ledger:
+            ledger.recalculate()
+
+        return Response({'message': 'Fee assignment deleted successfully'}, status=status.HTTP_200_OK)
+
     def perform_create(self, serializer):
         instance = serializer.save(created_by=self.request.user)
+        # Apply concession if student has fee concession applicable
+        student = instance.student
+        if student.fee_concession_applicable and student.fee_concession_amount > 0:
+            instance.special_discount = student.fee_concession_amount
+            if not instance.discount_reason:
+                instance.discount_reason = f"Concession of ₹{student.fee_concession_amount} applied"
+            instance.save()
         # Generate installments
         self._generate_installments(instance)
     
@@ -238,12 +309,23 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
         if not schedule:
             return
         
+        # Ensure assignment net_payable and per_installment_fee are fresh and saved
+        assignment.calculate_fees()
+        assignment.save()
+
+        # Clean up any pre-existing installments to prevent duplicate or stale amount records
+        assignment.installments.all().delete()
+
         # Determine installment dates based on schedule type
         installment_names = self._get_installment_names(schedule)
         due_dates = self._get_due_dates(schedule, assignment.academic_year)
         
-        amount_per_installment = assignment.per_installment_fee
-        
+        from decimal import Decimal
+        if schedule.installments_per_year > 0:
+            amount_per_installment = assignment.net_payable / Decimal(str(schedule.installments_per_year))
+        else:
+            amount_per_installment = assignment.net_payable
+
         for i, (name, due_date) in enumerate(zip(installment_names, due_dates), 1):
             FeeInstallment.objects.create(
                 fee_assignment=assignment,
@@ -300,6 +382,9 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
 
     def _generate_all_invoices(self, assignment):
         """Generate all invoices for the entire academic year upon assignment"""
+        if assignment.student.is_rte_student:
+            return
+            
         installments = assignment.installments.all().order_by('installment_number')
         
         for installment in installments:
@@ -327,6 +412,7 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=400)
         
         data = serializer.validated_data
+        concession_selections = request.data.get('concession_selections', {})
         
         try:
             fee_structure = FeeStructure.objects.get(id=data['fee_structure_id'])
@@ -334,7 +420,7 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Fee structure not found'}, status=404)
         
         # Auto-create or fetch the payment schedule for this school
-        schedule_type = data['schedule_type']
+        schedule_type = data.get('schedule_type') or 'YEARLY'
         schedule_defaults = {
             'YEARLY': {'name': 'Yearly Payment Plan', 'installments_per_year': 1},
             'MONTHLY': {'name': 'Monthly Payment Plan', 'installments_per_year': 12},
@@ -370,8 +456,10 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
         # Build student query
         students = Student.objects.filter(
             school=fee_structure.school,
-            status='ACTIVE'
+            status__in=['ACTIVE', 'TEMPORARY']
         )
+        if data.get('academic_year'):
+            students = students.filter(enrollments__academic_year=data['academic_year']).distinct()
         
         if data.get('student_ids'):
             students = students.filter(id__in=data['student_ids'])
@@ -402,7 +490,13 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
                     skipped += 1
                     continue
                 
+                # If overriding existing but we want to preserve schedule if not changed
+                selected_schedule = fee_schedule
                 if existing:
+                    # preserve the schedule they had if they had one
+                    if not data.get('schedule_type'):
+                        selected_schedule = existing.fee_schedule
+                        
                     # Wipe the associated ledger entry first to prevent double charging
                     from apps.finance.models import FeeLedgerEntry, Invoice
                     FeeLedgerEntry.objects.filter(
@@ -426,10 +520,31 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
                     student=student,
                     school=fee_structure.school,
                     fee_structure=fee_structure,
-                    fee_schedule=fee_schedule,
+                    fee_schedule=selected_schedule,
                     academic_year=data['academic_year'],
                     created_by=request.user
                 )
+
+                # Apply concession if applicable
+                if student.fee_concession_applicable and student.fee_concession_amount > 0:
+                    selected_fee_field = concession_selections.get(str(student.id))
+                    if selected_fee_field:
+                        assignment.special_discount = student.fee_concession_amount
+                        field_labels = {
+                            'tuition_fee': 'Tuition Fee',
+                            'admission_fee': 'Admission Fee',
+                            'exam_fee': 'Exam Fee',
+                            'lab_fee': 'Lab Fee',
+                            'library_fee': 'Library Fee',
+                            'sports_fee': 'Sports Fee',
+                            'computer_fee': 'Computer Fee',
+                            'transport_fee': 'Transport Fee',
+                            'misc_fee': 'Miscellaneous Fee',
+                            'development_fee': 'Development Fee'
+                        }
+                        lbl = field_labels.get(selected_fee_field, selected_fee_field)
+                        assignment.discount_reason = f"Concession of ₹{student.fee_concession_amount} applied to {lbl}"
+                        assignment.save()
                 
                 # Generate installments
                 self._generate_installments(assignment)
@@ -475,6 +590,9 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
     def generate_invoice(self, request, pk=None):
         """Generate invoice for a specific installment"""
         assignment = self.get_object()
+        if assignment.student.is_rte_student:
+            return Response({'error': 'Cannot generate invoice for RTE student. Fees are reimbursed by the state.'}, status=400)
+            
         installment_id = request.data.get('installment_id')
         
         if installment_id:
@@ -487,6 +605,13 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
         
         if not installment:
             return Response({'error': 'No pending installments'}, status=400)
+        
+        # Check if an invoice already exists for this installment
+        from apps.schools.models_settings import SchoolSettings
+        school_settings = SchoolSettings.objects.filter(school=assignment.school).first()
+        if school_settings and getattr(school_settings, 'prevent_duplicate_billing', True):
+            if Invoice.objects.filter(installment=installment).exists():
+                return Response({'error': 'An invoice already exists for this installment.'}, status=400)
         
         # Create invoice
         invoice = Invoice.objects.create(
@@ -505,12 +630,258 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
             'invoice_id': str(invoice.id)
         })
 
+    @action(detail=False, methods=['post'])
+    def bulk_allocate_schedule(self, request):
+        """
+        Bulk allocate payment schedules (schedules) to multiple students.
+        POST /api/v1/finance/assignments/bulk_allocate_schedule/
+        """
+        schedule_type = request.data.get('schedule_type')
+        academic_year = request.data.get('academic_year')
+        grade_id = request.data.get('grade_id')
+        section_id = request.data.get('section_id')
+        student_ids = request.data.get('student_ids', [])
+        override_existing = request.data.get('override_existing', False)
+        custom_installments = request.data.get('custom_installments', [])
+
+        if not schedule_type or not academic_year:
+            return Response({'error': 'schedule_type and academic_year are required'}, status=400)
+
+        from apps.core.school_isolation import get_user_school
+        from apps.schools.models import School
+        school = getattr(request.user, 'school', None) or get_user_school(request.user)
+        if not school:
+            school_id = request.data.get('school') or request.query_params.get('school')
+            if school_id:
+                school = School.objects.filter(id=school_id).first()
+
+        if not school:
+            return Response({'error': 'School context missing'}, status=400)
+
+        # Auto-create or fetch FeeSchedule
+        schedule_defaults = {
+            'YEARLY': {'name': 'Yearly Payment Plan', 'installments_per_year': 1},
+            'MONTHLY': {'name': 'Monthly Payment Plan', 'installments_per_year': 12},
+            'HALF_YEARLY': {'name': 'Semester Payment Plan', 'installments_per_year': 2},
+            'QUARTERLY': {'name': 'Quarterly Payment Plan', 'installments_per_year': 4},
+            'BI_MONTHLY': {'name': 'Bi-Monthly Payment Plan', 'installments_per_year': 6},
+        }
+        defaults = schedule_defaults.get(schedule_type, {'name': f'{schedule_type} Plan', 'installments_per_year': 1})
+        
+        fee_schedule, _ = FeeSchedule.objects.get_or_create(
+            school=school,
+            schedule_type=schedule_type,
+            defaults={
+                'name': defaults['name'],
+                'installments_per_year': defaults['installments_per_year'],
+                'is_active': True,
+            }
+        )
+
+        students = Student.objects.filter(school=school, status__in=['ACTIVE', 'TEMPORARY'])
+        if academic_year:
+            students = students.filter(enrollments__academic_year=academic_year).distinct()
+        if student_ids and 'ALL' not in student_ids:
+            students = students.filter(id__in=student_ids)
+        elif grade_id:
+            students = students.filter(grade_config_id=grade_id)
+        if section_id:
+            students = students.filter(current_section_id=section_id)
+
+        successful = 0
+        skipped = 0
+
+        for student in students:
+            assignment = StudentFeeAssignment.objects.filter(
+                student=student,
+                academic_year=academic_year
+            ).first()
+
+            if assignment:
+                if assignment.fee_schedule == fee_schedule and not custom_installments:
+                    skipped += 1
+                    continue
+                if not override_existing:
+                    skipped += 1
+                    continue
+
+                # Wipe existing ledger entries and invoices
+                from apps.finance.models import FeeLedgerEntry, Invoice
+                FeeLedgerEntry.objects.filter(
+                    ledger__student=student,
+                    ledger__academic_year=academic_year,
+                    entry_type='CHARGE',
+                    description__startswith='Annual Fee Assignment'
+                ).delete()
+                
+                Invoice.objects.filter(
+                    student=student,
+                    academic_year=academic_year,
+                    fee_assignment=assignment
+                ).delete()
+
+                # Apply concession if student has fee concession
+                if student.fee_concession_applicable and student.fee_concession_amount > 0:
+                    assignment.special_discount = student.fee_concession_amount
+                    if not assignment.discount_reason:
+                        assignment.discount_reason = f"Concession of ₹{student.fee_concession_amount} applied"
+
+                # Update schedule & calculate net payable with concession
+                assignment.fee_schedule = fee_schedule
+                assignment.save()
+
+                # Regenerate
+                if custom_installments:
+                    assignment.installments.all().delete()
+                    student_net = assignment.net_payable
+                    total_custom = sum(Decimal(str(inst.get('amount', 0))) for inst in custom_installments)
+
+                    # Constraint: sum of installments cannot exceed net payable amount
+                    if total_custom > student_net + Decimal('0.01'):
+                        return Response({
+                            'error': f"Total installments amount (₹{total_custom:.2f}) exceeds the net payable fee (₹{student_net:.2f}) for student {student.suid}."
+                        }, status=400)
+
+                    for i, inst in enumerate(custom_installments, 1):
+                        amount = Decimal(str(inst.get('amount', 0)))
+                        if amount < 0:
+                            return Response({'error': f"Installment amount cannot be negative for student {student.suid}."}, status=400)
+
+                        due_date_str = inst.get('due_date')
+                        due_date = parse_date(due_date_str) if due_date_str else timezone.now().date()
+                        FeeInstallment.objects.create(
+                            fee_assignment=assignment,
+                            installment_number=i,
+                            installment_name=f"Installment {i}",
+                            amount_due=amount,
+                            due_date=due_date
+                        )
+                else:
+                    self._generate_installments(assignment)
+                    
+                self._generate_all_invoices(assignment)
+                successful += 1
+            else:
+                # If they don't have assignment, we need a structure. Let's find one for their grade
+                from apps.finance.models import FeeStructure
+                grade_id_to_use = grade_id or getattr(student.current_grade, 'id', None)
+                fee_structure = FeeStructure.objects.filter(
+                    school=school,
+                    grade_id=grade_id_to_use,
+                    academic_year=academic_year
+                ).first()
+                if not fee_structure:
+                    fee_structure = FeeStructure.objects.filter(
+                        school=school,
+                        academic_year=academic_year
+                    ).first()
+
+                if fee_structure:
+                    assignment = StudentFeeAssignment.objects.create(
+                        student=student,
+                        school=school,
+                        fee_structure=fee_structure,
+                        fee_schedule=fee_schedule,
+                        academic_year=academic_year,
+                        created_by=request.user
+                    )
+
+                    if student.fee_concession_applicable and student.fee_concession_amount > 0:
+                        assignment.special_discount = student.fee_concession_amount
+                        if not assignment.discount_reason:
+                            assignment.discount_reason = f"Concession of ₹{student.fee_concession_amount} applied"
+                        assignment.save()
+                    
+                    if custom_installments:
+                        assignment.installments.all().delete()
+                        student_net = assignment.net_payable
+                        total_custom = sum(Decimal(str(inst.get('amount', 0))) for inst in custom_installments)
+
+                        # Constraint: sum of installments cannot exceed net payable amount
+                        if total_custom > student_net + Decimal('0.01'):
+                            return Response({
+                                'error': f"Total installments amount (₹{total_custom:.2f}) exceeds the net payable fee (₹{student_net:.2f}) for student {student.suid}."
+                            }, status=400)
+
+                        for i, inst in enumerate(custom_installments, 1):
+                            amount = Decimal(str(inst.get('amount', 0)))
+                            if amount < 0:
+                                return Response({'error': f"Installment amount cannot be negative for student {student.suid}."}, status=400)
+
+                            due_date_str = inst.get('due_date')
+                            due_date = parse_date(due_date_str) if due_date_str else timezone.now().date()
+                            FeeInstallment.objects.create(
+                                fee_assignment=assignment,
+                                installment_number=i,
+                                installment_name=f"Installment {i}",
+                                amount_due=amount,
+                                due_date=due_date
+                            )
+                    else:
+                        self._generate_installments(assignment)
+                        
+                    self._generate_all_invoices(assignment)
+                    successful += 1
+                else:
+                    skipped += 1
+
+        return Response({
+            'message': 'Payment structures allocated successfully',
+            'successful': successful,
+            'skipped': skipped
+        })
+
+    @action(detail=False, methods=['post'])
+    def record_reimbursement(self, request):
+        """
+        Record a state reimbursement for an RTE student.
+        POST /api/v1/finance/assignments/record_reimbursement/
+        """
+        student_id = request.data.get('student_id')
+        amount_raw = request.data.get('amount')
+        date_received = request.data.get('date_received')
+        mode = request.data.get('mode_of_payment', 'BANK_TRANSFER')
+        transaction_id = request.data.get('transaction_id', '')
+
+        if not student_id:
+            return Response({'error': 'Student ID is required'}, status=400)
+        try:
+            student = Student.objects.get(id=student_id)
+        except Student.DoesNotExist:
+            return Response({'error': 'Student not found'}, status=404)
+
+        try:
+            amount = Decimal(str(amount_raw))
+        except:
+            return Response({'error': 'Invalid amount'}, status=400)
+
+        if amount <= 0:
+            return Response({'error': 'Amount must be positive'}, status=400)
+
+        from apps.finance.models import Transaction
+        txn = Transaction.objects.create(
+            student=student,
+            school=student.school,
+            amount=amount,
+            payment_mode=mode,
+            reference_number=transaction_id,
+            transaction_date=date_received or timezone.now().date(),
+            collected_by=request.user,
+            notes="State Government RTE Fee Reimbursement"
+        )
+
+        return Response({
+            'message': 'Reimbursement recorded successfully',
+            'receipt_number': txn.receipt_number
+        })
+
 
 # ============================================================
 # FEE INSTALLMENT VIEWSET
 # ============================================================
 
-class FeeInstallmentViewSet(viewsets.ModelViewSet):
+class FeeInstallmentViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
+    school_field = 'school'
     """
     API for managing fee installments
     """
@@ -522,7 +893,7 @@ class FeeInstallmentViewSet(viewsets.ModelViewSet):
     rbac_resource = 'installment'
     
     def get_queryset(self):
-        queryset = FeeInstallment.objects.select_related('fee_assignment', 'fee_assignment__student')
+        queryset = super().get_queryset().select_related('fee_assignment', 'fee_assignment__student')
         
         assignment_id = self.request.query_params.get('assignment')
         if assignment_id:
@@ -557,7 +928,8 @@ class FeeInstallmentViewSet(viewsets.ModelViewSet):
 # FEE HIKE CONFIG VIEWSET
 # ============================================================
 
-class FeeHikeConfigViewSet(viewsets.ModelViewSet):
+class FeeHikeConfigViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
+    school_field = 'school'
     """
     API for managing annual fee hike configurations
     """
@@ -569,7 +941,7 @@ class FeeHikeConfigViewSet(viewsets.ModelViewSet):
     rbac_resource = 'fee_hike'
     
     def get_queryset(self):
-        queryset = FeeHikeConfig.objects.all()
+        queryset = super().get_queryset()
         school_id = self.request.query_params.get('school')
         if school_id:
             queryset = queryset.filter(school_id=school_id)
@@ -613,7 +985,8 @@ class FeeHikeConfigViewSet(viewsets.ModelViewSet):
 # BULK FEE ASSIGNMENT VIEWSET
 # ============================================================
 
-class BulkFeeAssignmentViewSet(viewsets.ReadOnlyModelViewSet):
+class BulkFeeAssignmentViewSet(SchoolIsolationMixin, viewsets.ReadOnlyModelViewSet):
+    school_field = 'school'
     """
     API for viewing bulk assignment history
     """
@@ -625,7 +998,7 @@ class BulkFeeAssignmentViewSet(viewsets.ReadOnlyModelViewSet):
     rbac_resource = 'bulk_assignment'
     
     def get_queryset(self):
-        queryset = BulkFeeAssignment.objects.select_related(
+        queryset = super().get_queryset().select_related(
             'target_grade', 'target_section', 'fee_structure', 'fee_schedule'
         )
         school_id = self.request.query_params.get('school')
@@ -638,16 +1011,25 @@ class BulkFeeAssignmentViewSet(viewsets.ReadOnlyModelViewSet):
 # ORIGINAL VIEWSETS (UPDATED)
 # ============================================================
 
-class FeeCategoryViewSet(viewsets.ModelViewSet):
+class FeeCategoryViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
+    school_field = 'school'
     queryset = FeeCategory.objects.all()
     serializer_class = FeeCategorySerializer
     permission_classes = [IsAuthenticated, RBACPermission]
     
     rbac_module = 'finance'
     rbac_resource = 'fee'
+    rbac_action_permissions = {
+        'list':           ['finance.manage_categories', 'finance.generate_invoice', 'finance.view_overview'],
+        'retrieve':       ['finance.manage_categories', 'finance.generate_invoice', 'finance.view_overview'],
+        'create':         'finance.manage_categories',
+        'update':         'finance.manage_categories',
+        'partial_update': 'finance.manage_categories',
+        'destroy':        'finance.manage_categories',
+    }
     
     def get_queryset(self):
-        queryset = FeeCategory.objects.all()
+        queryset = super().get_queryset()
         school_id = self.request.query_params.get('school')
         if school_id:
             queryset = queryset.filter(school_id=school_id)
@@ -656,21 +1038,61 @@ class FeeCategoryViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(is_active=is_active.lower() == 'true')
         return queryset
 
+    def perform_create(self, serializer):
+        school = getattr(self.request.user, 'school', None)
+        serializer.save(school=school)
 
-class InvoiceViewSet(viewsets.ModelViewSet):
+
+class InvoiceViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
+    school_field = 'school'
     queryset = Invoice.objects.all().order_by('-created_at')
     serializer_class = InvoiceSerializer
     permission_classes = [IsAuthenticated, RBACPermission]
+
+    def get_permissions(self):
+        if self.action == 'student_invoices':
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
+    def check_permissions(self, request):
+        if self.action in ['student_invoices']:
+            return
+        super().check_permissions(request)
+
     
     rbac_module = 'finance'
     rbac_resource = 'invoice'
     rbac_action_permissions = {
-        'record_payment': 'finance.collect_fee',
-        'export': 'finance.view_invoice',
+        'list':                ['finance.view_invoice', 'finance.view_overview'],
+        'retrieve':            ['finance.view_invoice', 'finance.view_overview'],
+        'create':              'finance.generate_invoice',
+        'destroy':             'finance.generate_invoice',
+        'check_duplicate':     ['finance.generate_invoice', 'finance.view_overview'],
+        'record_payment':      'finance.collect_fee',
+        'export':              'finance.view_invoice',
+        'apply_grade_late_fee': ['finance.change_invoice', 'finance.apply_late_fees'],
     }
+
+    def perform_destroy(self, instance):
+        ledger = instance.ledger
+        installment = instance.installment
+        instance.delete()
+        if ledger:
+            ledger.recalculate()
+        if installment:
+            paid_sum = sum(inv.paid_amount for inv in installment.invoices.all())
+            installment.amount_paid = paid_sum
+            if paid_sum >= installment.amount_due:
+                installment.status = 'PAID'
+            elif paid_sum > 0:
+                installment.status = 'PARTIAL'
+            else:
+                installment.status = 'PENDING'
+            installment.save()
+
     
     def get_queryset(self):
-        queryset = Invoice.objects.select_related('student', 'student__user').prefetch_related('transactions')
+        queryset = super().get_queryset().select_related('student', 'student__user').prefetch_related('transactions')
         
         school_id = self.request.query_params.get('school')
         if school_id:
@@ -723,6 +1145,44 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             academic_year=academic_year
         )
 
+    @action(detail=False, methods=['post'])
+    def apply_grade_late_fee(self, request):
+        """Apply late fee to all overdue invoices of a selected grade"""
+        grade_id = request.data.get('grade_id')
+        late_fee_amount = request.data.get('late_fee_amount')
+        
+        if not grade_id:
+            return Response({'error': 'grade_id is required'}, status=400)
+        if late_fee_amount is None:
+            return Response({'error': 'late_fee_amount is required'}, status=400)
+            
+        try:
+            from decimal import Decimal, InvalidOperation
+            late_fee_amount = Decimal(str(late_fee_amount))
+        except (ValueError, TypeError, InvalidOperation):
+            return Response({'error': 'Invalid late_fee_amount'}, status=400)
+            
+        if late_fee_amount < 0:
+            return Response({'error': 'late_fee_amount must be positive'}, status=400)
+            
+        today = timezone.now().date()
+        overdue_invoices = Invoice.objects.filter(
+            Q(student__grade_config_id=grade_id) | Q(student__current_section__grade_config_id=grade_id)
+        ).filter(
+            Q(status='OVERDUE') | Q(status__in=['UNPAID', 'PARTIAL'], due_date__lt=today)
+        ).distinct()
+        
+        updated_count = 0
+        for invoice in overdue_invoices:
+            invoice.late_fee = late_fee_amount
+            invoice.save()
+            updated_count += 1
+            
+        return Response({
+            'message': f'Applied late fee of INR {late_fee_amount} to {updated_count} invoices.',
+            'updated_count': updated_count
+        })
+
     @action(detail=True, methods=['post'])
     def record_payment(self, request, pk=None):
         """
@@ -741,8 +1201,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if amount <= 0:
             return Response({'error': 'Invalid amount'}, status=400)
         
-        if amount > invoice.balance_due:
-            return Response({'error': f'Amount exceeds balance due (₹{invoice.balance_due})'}, status=400)
+        notes = request.data.get('notes', '')
 
         # Create Transaction
         txn = Transaction.objects.create(
@@ -752,7 +1211,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             amount=amount,
             payment_mode=mode,
             reference_number=reference,
-            collected_by=request.user
+            collected_by=request.user,
+            notes=notes
         )
 
         return Response({
@@ -787,6 +1247,123 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             'total_pending': stats['total_pending'] or 0,
             'by_status': {item['status']: item['count'] for item in status_counts}
         })
+
+    @action(detail=False, methods=['get'])
+    def student_invoices(self, request):
+        """
+        Get all invoices generated by the school for the currently logged-in student.
+        Calculates summary metrics: Total Fee Amount, Amount Paid, Pending Balance, Payment Coverage.
+        """
+        user = request.user
+        from apps.students.models import Student
+        from decimal import Decimal
+
+        student = Student.objects.filter(user=user).first()
+        if not student:
+            student_id = request.query_params.get('student_id')
+            if student_id:
+                student = Student.objects.filter(id=student_id).first()
+
+        if not student:
+            return Response({'error': 'Student profile not found for this user.'}, status=404)
+
+        school = student.school or self.get_user_school()
+        if not school:
+            return Response({'error': 'School context not found for student.'}, status=400)
+
+        # Fetch all invoices generated for this student
+        invoices_qs = Invoice.objects.filter(
+            student=student
+        ).select_related(
+            'student', 'school', 'fee_assignment', 'installment'
+        ).prefetch_related('categories', 'items').order_by('-created_at', '-invoice_date')
+
+        # Fallback: Also check invoices matching student.suid if needed
+        if not invoices_qs.exists() and student.suid:
+            invoices_qs = Invoice.objects.filter(
+                student__suid=student.suid
+            ).select_related(
+                'student', 'school', 'fee_assignment', 'installment'
+            ).prefetch_related('categories', 'items').order_by('-created_at', '-invoice_date')
+
+        total_fee_amount = Decimal(0)
+        amount_paid = Decimal(0)
+        pending_balance = Decimal(0)
+
+        for inv in invoices_qs:
+            if inv.status == 'CANCELLED':
+                continue
+            inv_total = inv.total_amount or Decimal(0)
+            inv_paid = inv.paid_amount or Decimal(0)
+
+            total_fee_amount += inv_total
+            amount_paid += inv_paid
+
+            if inv.status != 'PAID' and inv_paid < inv_total:
+                pending_balance += (inv_total - inv_paid)
+
+        if total_fee_amount > Decimal(0):
+            payment_coverage = round(float((amount_paid / total_fee_amount) * 100), 1)
+        else:
+            payment_coverage = 100.0
+
+
+        invoice_list = []
+        for inv in invoices_qs:
+            cats = list(inv.categories.values_list('name', flat=True))
+            category_str = ", ".join(cats) if cats else "Tuition & School Fees"
+
+            desc = inv.description
+            if not desc and inv.installment:
+                desc = getattr(inv.installment, 'installment_name', None) or getattr(inv.installment, 'name', '') or 'Fee Installment'
+            elif not desc and inv.fee_assignment:
+                desc = f"Academic Year {inv.academic_year or 'Fee'}"
+            elif not desc:
+                desc = f"School Fee Invoice ({category_str})"
+
+
+            status_val = inv.status
+            if inv.paid_amount >= inv.total_amount and inv.total_amount > Decimal(0):
+                status_val = 'PAID'
+
+            invoice_list.append({
+                'id': str(inv.id),
+                'invoice_number': inv.invoice_number,
+                'description': desc,
+                'category': category_str,
+                'subtotal': float(inv.subtotal or inv.total_amount),
+                'discount_amount': float(inv.discount_amount or 0),
+                'late_fee': float(inv.late_fee or 0),
+                'total_amount': float(inv.total_amount),
+                'paid_amount': float(inv.paid_amount),
+                'pending_amount': float(max(Decimal(0), inv.total_amount - inv.paid_amount)),
+                'invoice_date': str(inv.invoice_date),
+                'due_date': str(inv.due_date) if inv.due_date else '',
+                'paid_date': str(inv.paid_date) if inv.paid_date else None,
+                'status': status_val,
+                'status_display': inv.get_status_display() if hasattr(inv, 'get_status_display') else status_val,
+                'is_paid': (status_val == 'PAID')
+            })
+
+        student_name = ""
+        if student.user:
+            student_name = student.user.get_full_name().strip()
+        if not student_name:
+            student_name = f"{getattr(student, 'first_name', '')} {getattr(student, 'last_name', '')}".strip()
+        if not student_name:
+            student_name = getattr(student, 'full_name_display', '') or student.suid or 'Student'
+
+        return Response({
+            'student_name': student_name,
+            'suid': student.suid,
+            'school_name': school.display_name or school.legal_name,
+            'total_fee_amount': float(total_fee_amount),
+            'amount_paid': float(amount_paid),
+            'pending_balance': float(pending_balance),
+            'payment_coverage': payment_coverage,
+            'invoices': invoice_list
+        }, status=status.HTTP_200_OK)
+
     
     @action(detail=False, methods=['get', 'post'])
     def check_duplicate(self, request):
@@ -944,7 +1521,7 @@ class StudentFeeProfileView(APIView):
         
         # Get payment history (transactions)
         transactions = Transaction.objects.filter(
-            invoice__student=student
+            student=student
         ).order_by('-transaction_date')[:20]
         
         # Calculate summary from Ledger
@@ -974,6 +1551,7 @@ class StudentFeeProfileView(APIView):
                 'current_class': f"{student.current_grade.grade_name}-{student.current_section.section_letter}" if student.current_grade and student.current_section else None,
                 'email': student.user.email if student.user else None,
                 'photo': student.profile_photo.url if student.profile_photo else None,
+                'is_rte_student': student.is_rte_student,
             },
             'current_assignment': {
                 'id': str(assignment.id) if assignment else None,
@@ -1022,6 +1600,7 @@ class StudentFeeProfileView(APIView):
                     'mode': tx.payment_mode,
                     'reference': tx.reference_number or '',
                     'invoice_number': tx.invoice.invoice_number if tx.invoice else None,
+                    'notes': tx.notes or '',
                 }
                 for tx in transactions
             ],
@@ -1041,7 +1620,8 @@ class StudentFeeProfileView(APIView):
 # FEE LEDGER VIEWSET
 # ============================================================
 
-class FeeLedgerViewSet(viewsets.ModelViewSet):
+class FeeLedgerViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
+    school_field = 'school'
     """
     API for managing student fee ledgers - single source of truth for finances
     """
@@ -1051,9 +1631,20 @@ class FeeLedgerViewSet(viewsets.ModelViewSet):
     
     rbac_module = 'finance'
     rbac_resource = 'ledger'
-    
+    rbac_action_permissions = {
+        'list':           'finance.view_ledger',
+        'retrieve':       'finance.view_ledger',
+        'create':         'finance.edit_ledger',
+        'update':         'finance.edit_ledger',
+        'partial_update': 'finance.edit_ledger',
+        'destroy':        'finance.edit_ledger',
+        'add_charge':     'finance.edit_ledger',
+        'add_payment':    'finance.edit_ledger',
+        'summary':        'finance.view_ledger',
+    }
+
     def get_queryset(self):
-        queryset = FeeLedger.objects.select_related(
+        queryset = super().get_queryset().select_related(
             'student', 'student__user', 'student__grade_config', 'school'
         ).prefetch_related('entries')
         
@@ -1208,6 +1799,8 @@ class FeeLedgerViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Student not found'}, status=404)
         
         ledgers = FeeLedger.objects.filter(student=student).order_by('academic_year')
+        for ledger in ledgers:
+            ledger.recalculate()
         
         # Calculate lifetime totals
         totals = ledgers.aggregate(
@@ -1220,6 +1813,7 @@ class FeeLedgerViewSet(viewsets.ModelViewSet):
             'student_name': student.user.full_name if student.user else f"{student.first_name} {student.last_name}",
             'student_suid': student.suid,
             'current_grade': student.current_grade.grade_name if student.current_grade else None,
+            'is_rte_student': student.is_rte_student,
             'ledgers': FeeLedgerSerializer(ledgers, many=True).data,
             'lifetime_total_charges': totals['total_charges'],
             'lifetime_total_payments': totals['total_payments'],
@@ -1269,7 +1863,8 @@ class FeeLedgerViewSet(viewsets.ModelViewSet):
 # DISCOUNT RECORD VIEWSET
 # ============================================================
 
-class DiscountRecordViewSet(viewsets.ModelViewSet):
+class DiscountRecordViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
+    school_field = 'school'
     """
     API for managing discounts and scholarships with approval workflow
     """
@@ -1281,7 +1876,7 @@ class DiscountRecordViewSet(viewsets.ModelViewSet):
     rbac_resource = 'discount'
     
     def get_queryset(self):
-        queryset = DiscountRecord.objects.select_related(
+        queryset = super().get_queryset().select_related(
             'student', 'student__user', 'school', 'fee_category',
             'created_by', 'approved_by'
         )
@@ -1424,7 +2019,8 @@ class DiscountRecordViewSet(viewsets.ModelViewSet):
 # LATE FEE RULE VIEWSET
 # ============================================================
 
-class LateFeeRuleViewSet(viewsets.ModelViewSet):
+class LateFeeRuleViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
+    school_field = 'school'
     """
     API for managing late fee calculation rules
     """
@@ -1436,7 +2032,7 @@ class LateFeeRuleViewSet(viewsets.ModelViewSet):
     rbac_resource = 'late_fee'
     
     def get_queryset(self):
-        queryset = LateFeeRule.objects.all()
+        queryset = super().get_queryset()
         
         school_id = self.request.query_params.get('school')
         if school_id:
@@ -1549,7 +2145,8 @@ class LateFeeRuleViewSet(viewsets.ModelViewSet):
 # FEE AUDIT LOG VIEWSET
 # ============================================================
 
-class FeeAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+class FeeAuditLogViewSet(SchoolIsolationMixin, viewsets.ReadOnlyModelViewSet):
+    school_field = 'school'
     """
     API for viewing fee audit logs (read-only)
     """
@@ -1561,7 +2158,7 @@ class FeeAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     rbac_resource = 'audit'
     
     def get_queryset(self):
-        queryset = FeeAuditLog.objects.select_related(
+        queryset = super().get_queryset().select_related(
             'school', 'student', 'student__user', 'performed_by'
         )
         
@@ -1788,3 +2385,125 @@ class FinanceSummaryView(APIView):
             'pending': float(pending),
             'collection_rate': round((float(collected) / float(total) * 100), 1) if total > 0 else 0
         })
+
+
+# ============================================================
+# SALARY DEDUCTION VIEWSET
+# ============================================================
+
+class SalaryDeductionViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
+    """
+    CRUD API for staff salary deductions.
+    Deductions are scoped per school and filtered by teacher/month.
+    """
+    school_field = 'school'
+    from .models import SalaryDeduction
+    from .serializers import SalaryDeductionSerializer
+    queryset = SalaryDeduction.objects.all()
+    serializer_class = None  # set in get_serializer_class
+    permission_classes = [IsAuthenticated, RBACPermission]
+    rbac_module = 'finance'
+    rbac_resource = 'salary'
+    rbac_action_permissions = {
+        'list':           'finance.view_salary',
+        'retrieve':       'finance.view_salary',
+        'create':         'finance.edit_salary',
+        'update':         'finance.edit_salary',
+        'partial_update': 'finance.edit_salary',
+        'destroy':        'finance.edit_salary',
+    }
+
+    def get_permissions(self):
+        if self.action == 'my_salary':
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
+    def check_permissions(self, request):
+        if self.action in ['my_salary']:
+            return
+        super().check_permissions(request)
+
+    @action(detail=False, methods=['get'])
+    def my_salary(self, request):
+        user = request.user
+        from apps.teachers.models import Teacher
+        from apps.accounts.permission_utils import get_teacher_for_user
+        from .models import SalaryDeduction
+        from .serializers import SalaryDeductionSerializer
+        import datetime
+
+        teacher = get_teacher_for_user(user)
+        if not teacher:
+            teacher = Teacher.objects.filter(user=user).first()
+        if not teacher and hasattr(user, 'email') and user.email:
+            teacher = Teacher.objects.filter(user__email__iexact=user.email).first()
+        if not teacher and hasattr(user, 'username') and user.username:
+            teacher = Teacher.objects.filter(tuid__iexact=user.username).first()
+
+        if not teacher:
+            teacher_id = request.query_params.get('teacher_id')
+            if teacher_id:
+                teacher = Teacher.objects.filter(id=teacher_id).first()
+
+        if not teacher:
+            return Response({'error': 'Teacher profile not found.'}, status=404)
+
+        month = request.query_params.get('month')
+        if not month:
+            month = datetime.date.today().strftime('%Y-%m')
+
+        base_salary = float(teacher.salary or 0.0)
+
+        # All deduction history for this teacher
+        all_deductions = SalaryDeduction.objects.filter(teacher=teacher).select_related('teacher__user', 'recorded_by').order_by('-created_at')
+
+        # Filtered deductions for selected month
+        month_deductions = [d for d in all_deductions if d.month == month]
+
+        total_month_deduction = sum(float(d.amount or 0.0) for d in month_deductions)
+        total_all_time_deduction = sum(float(d.amount or 0.0) for d in all_deductions)
+
+        net_payable_salary = max(0.0, base_salary - total_month_deduction)
+
+        all_serializer = SalaryDeductionSerializer(all_deductions, many=True)
+        month_serializer = SalaryDeductionSerializer(month_deductions, many=True)
+
+        teacher_name = ""
+        if teacher.user:
+            teacher_name = teacher.user.get_full_name().strip()
+        if not teacher_name:
+            teacher_name = getattr(teacher, 'full_name', '') or teacher.tuid or 'Teacher'
+
+        return Response({
+            'teacher_name': teacher_name,
+            'tuid': teacher.tuid,
+            'month': month,
+            'base_salary': base_salary,
+            'total_month_deduction': round(total_month_deduction, 2),
+            'net_payable_salary': round(net_payable_salary, 2),
+            'total_all_time_deduction': round(total_all_time_deduction, 2),
+            'month_deductions': month_serializer.data,
+            'deduction_history': all_serializer.data
+        })
+
+    def get_queryset(self):
+        from .models import SalaryDeduction
+        qs = SalaryDeduction.objects.all()
+        school = getattr(self.request.user, 'school', None)
+        if school:
+            qs = qs.filter(school=school)
+        teacher_id = self.request.query_params.get('teacher')
+        month = self.request.query_params.get('month')
+        if teacher_id:
+            qs = qs.filter(teacher_id=teacher_id)
+        if month:
+            qs = qs.filter(month=month)
+        return qs.select_related('teacher__user', 'recorded_by')
+
+    def get_serializer_class(self):
+        from .serializers import SalaryDeductionSerializer
+        return SalaryDeductionSerializer
+
+    def perform_create(self, serializer):
+        school = getattr(self.request.user, 'school', None)
+        serializer.save(school=school, recorded_by=self.request.user)

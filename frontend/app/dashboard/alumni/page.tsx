@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   GraduationCap, Search, UserPlus, Calendar, Award, 
-  TrendingUp, X, Loader2, BookOpen 
+  TrendingUp, X, Loader2, BookOpen, Heart,
+  User, FileText, Trophy, Thermometer
 } from 'lucide-react';
 import { useSettings } from '@/lib/SettingsContext';
+import api from '@/lib/api';
 
 interface AlumniStudent {
   id: string;
@@ -21,17 +22,42 @@ interface AlumniStudent {
 }
 
 export default function AlumniPage() {
-  const { formatAcademicYear } = useSettings();
+  const { settings, formatAcademicYear } = useSettings();
   const [alumni, setAlumni] = useState<AlumniStudent[]>([]);
   const [filteredAlumni, setFilteredAlumni] = useState<AlumniStudent[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState('all');
 
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<AlumniStudent | null>(null);
   const [selectedSection, setSelectedSection] = useState('');
+
+  // Details Modal and Timeline State
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [detailStudent, setDetailStudent] = useState<AlumniStudent | null>(null);
+
+  // Journey state variables
+  const [studentObj, setStudentObj] = useState<any>(null);
+  const [fullProfile, setFullProfile] = useState<any>(null);
+  const [guardians, setGuardians] = useState<any[]>([]);
+  const [crossSchoolHistory, setCrossSchoolHistory] = useState<any[]>([]);
+  const [studentHistory, setStudentHistory] = useState<any[]>([]);
+  const [reportCards, setReportCards] = useState<any[]>([]);
+  
+  const [selectedTenure, setSelectedTenure] = useState<any>(null);
+  const [selectedGrade, setSelectedGrade] = useState<string>('');
+  const [dynamicAttendance, setDynamicAttendance] = useState<any>(null);
+  
+  const [timelineMarks, setTimelineMarks] = useState<any[]>([]);
+  const [timelineRemarks, setTimelineRemarks] = useState<any[]>([]);
+  const [timelineHealth, setTimelineHealth] = useState<any[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineTab, setTimelineTab] = useState<'marks' | 'remarks' | 'health'>('marks');
+  const [isDragging, setIsDragging] = useState(false);
+  const trackRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchAlumni();
@@ -41,15 +67,30 @@ export default function AlumniPage() {
     filterAlumni();
   }, [searchTerm, selectedYear, alumni]);
 
+  // Fetch live attendance stats from DB whenever the selected grade changes.
+  // Alumni students retain their StudentAttendance rows even after graduating,
+  // so this covers grades where StudentHistory.attendance_percentage was never filled in.
+  useEffect(() => {
+    const studentId = studentObj?.id;
+    if (!studentId || !selectedGrade) {
+      setDynamicAttendance(null);
+      return;
+    }
+    const fetchDynamicAttendance = async () => {
+      try {
+        const res = await api.get(`/attendance/student_grade_stats/?student_id=${studentId}&grade=${selectedGrade}`);
+        setDynamicAttendance(res.data);
+      } catch (e) {
+        console.warn('Failed to fetch dynamic attendance for alumni', e);
+        setDynamicAttendance(null);
+      }
+    };
+    fetchDynamicAttendance();
+  }, [studentObj?.id, selectedGrade]);
+
   const fetchAlumni = async () => {
     try {
-      const token = localStorage.getItem('access_token');
-      // Fetch enrollments with status GRADUATED.
-      // Thanks to backend filtering, once student status changes to ACTIVE, they are omitted.
-      const response = await axios.get(
-        'http://localhost:8000/api/v1/enrollments/student-enrollments/?status=GRADUATED',
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await api.get('/enrollments/student-enrollments/?status=GRADUATED');
       setAlumni(response.data);
       setFilteredAlumni(response.data);
     } catch (error) {
@@ -87,11 +128,9 @@ export default function AlumniPage() {
     if (!selectedStudent || !selectedSection) return;
     
     try {
-      const token = localStorage.getItem('access_token');
-      await axios.post(
-        `http://localhost:8000/api/v1/enrollments/student-enrollments/${selectedStudent.id}/re_enroll/`,
-        { new_section: selectedSection },
-        { headers: { Authorization: `Bearer ${token}` } }
+      await api.post(
+        `/enrollments/student-enrollments/${selectedStudent.id}/re_enroll/`,
+        { new_section: selectedSection }
       );
       alert(`Student successfully readmitted to Grade 11 Section ${selectedSection}!`);
       setIsModalOpen(false);
@@ -108,12 +147,7 @@ export default function AlumniPage() {
     }
     
     try {
-      const token = localStorage.getItem('access_token');
-      await axios.post(
-        `http://localhost:8000/api/v1/enrollments/student-enrollments/${studentEnrollmentId}/confirm_alumni/`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await api.post(`/enrollments/student-enrollments/${studentEnrollmentId}/confirm_alumni/`);
       alert('Student confirmed as alumni successfully!');
       fetchAlumni();
     } catch (error: any) {
@@ -121,7 +155,355 @@ export default function AlumniPage() {
     }
   };
 
-  const graduationYears = [...new Set(alumni.map(a => a.academic_year))].sort().reverse();
+  const handleOpenDetail = async (alumnus: AlumniStudent) => {
+    const studentId = (alumnus as any).student || alumnus.id;
+    setDetailStudent(alumnus);
+    setIsDetailOpen(true);
+    setTimelineLoading(true);
+    setTimelineTab('marks');
+    setDynamicAttendance(null);
+    try {
+      const [
+        studentRes,
+        profileRes,
+        guardiansRes,
+        crossSchoolRes,
+        historyRes,
+        reportCardsRes,
+        marksRes,
+        remarksRes,
+        healthRes
+      ] = await Promise.all([
+        api.get(`/students/${studentId}/?status=ALL`),
+        api.get(`/students/${studentId}/profile/?status=ALL`).catch(() => ({ data: {} })),
+        api.get(`/students/${studentId}/guardians/?status=ALL`).catch(() => ({ data: [] })),
+        api.get(`/students/${studentId}/cross_school_history/?status=ALL`).catch(() => ({ data: [] })),
+        api.get(`/students/${studentId}/history/?status=ALL`).catch(() => ({ data: [] })),
+        api.get(`/academics/report-cards/for_student/?student_id=${studentId}`).catch(() => ({ data: [] })),
+        api.get(`/timeline/marks/?student_suid=${alumnus.student_suid}`).catch(() => ({ data: [] })),
+        api.get(`/timeline/remarks/?student_suid=${alumnus.student_suid}`).catch(() => ({ data: [] })),
+        api.get(`/timeline/health/?student_suid=${alumnus.student_suid}`).catch(() => ({ data: [] }))
+      ]);
+
+      const studentData = studentRes.data;
+      const fullProfileData = profileRes.data;
+      const guardiansList = guardiansRes.data?.results || guardiansRes.data || [];
+      const crossSchoolData = crossSchoolRes.data?.results || crossSchoolRes.data || [];
+      const historyData = historyRes.data?.results || historyRes.data || [];
+      const reportCardsData = reportCardsRes.data?.results || reportCardsRes.data || [];
+      const marksList = marksRes.data?.results || marksRes.data || [];
+      const remarksList = remarksRes.data?.results || remarksRes.data || [];
+      const healthList = healthRes.data?.results || healthRes.data || [];
+
+      setStudentObj(studentData);
+      setFullProfile(fullProfileData);
+      setGuardians(guardiansList);
+      setCrossSchoolHistory(crossSchoolData);
+      setStudentHistory(historyData);
+      setReportCards(reportCardsData);
+      setTimelineMarks(marksList);
+      setTimelineRemarks(remarksList);
+      setTimelineHealth(healthList);
+
+      const isStudentActive = studentData && studentData.status !== 'ALUMNI' && studentData.status !== 'WITHDRAWN' && studentData.status !== 'TRANSFERRED' && studentData.status !== 'GRADUATED';
+      const tempTenuresList = [...crossSchoolData];
+      const hasActive = tempTenuresList.some((t: any) => t.status === 'ACTIVE');
+      if (!hasActive && isStudentActive) {
+        tempTenuresList.push({
+          id: 'active-tenure',
+          school_name: studentData.school_name || studentData.school?.display_name || 'Current School',
+          status: 'ACTIVE',
+          admitted_date: studentData.admission_date || '',
+          transferred_date: null,
+          grade_from: studentData.grade_config?.grade_name || alumnus.grade || '',
+          grade_to: studentData.grade_config?.grade_name || alumnus.grade || '',
+          timeline_snapshot: {
+            marks: marksList,
+            remarks: remarksList,
+            health: healthList,
+            history: historyData,
+            report_cards: reportCardsData
+          }
+        });
+      } else {
+        tempTenuresList.forEach((t: any) => {
+          if (t.status === 'ACTIVE') {
+            t.timeline_snapshot = {
+              marks: marksList,
+              remarks: remarksList,
+              health: healthList,
+              history: historyData,
+              report_cards: reportCardsData
+            };
+          }
+        });
+      }
+
+      if (tempTenuresList.length > 0) {
+        const latestTenure = tempTenuresList.find((t: any) => t.status === 'ACTIVE') || tempTenuresList[tempTenuresList.length - 1];
+        setSelectedTenure(latestTenure);
+        setSelectedGrade(latestTenure.grade_to || latestTenure.grade_from || '');
+      } else {
+        setSelectedTenure(null);
+        setSelectedGrade('');
+      }
+
+    } catch (err) {
+      console.error("Failed to fetch full student journey", err);
+    } finally {
+      setTimelineLoading(false);
+    }
+  };
+
+  const schoolTenures = useMemo(() => {
+    const list = [...crossSchoolHistory];
+    const isStudentActive = studentObj && studentObj.status !== 'ALUMNI' && studentObj.status !== 'WITHDRAWN' && studentObj.status !== 'TRANSFERRED' && studentObj.status !== 'GRADUATED';
+    const hasActive = list.some((t: any) => t.status === 'ACTIVE');
+    if (!hasActive && isStudentActive) {
+      list.push({
+        id: 'active-tenure',
+        school_name: studentObj.school_name || studentObj.school?.display_name || studentObj.school?.name || 'Current School',
+        status: 'ACTIVE',
+        admitted_date: studentObj.admission_date || '',
+        transferred_date: null,
+        grade_from: studentObj.grade_config?.grade_name || detailStudent?.grade || '',
+        grade_to: studentObj.grade_config?.grade_name || detailStudent?.grade || '',
+        timeline_snapshot: {
+          marks: timelineMarks,
+          remarks: timelineRemarks,
+          health: timelineHealth,
+          history: studentHistory,
+          report_cards: reportCards
+        }
+      });
+    } else {
+      return list.map((t: any) => {
+        if (t.status === 'ACTIVE') {
+          return {
+            ...t,
+            timeline_snapshot: {
+              marks: timelineMarks,
+              remarks: timelineRemarks,
+              health: timelineHealth,
+              history: studentHistory,
+              report_cards: reportCards
+            }
+          };
+        }
+        return t;
+      });
+    }
+    return list;
+  }, [crossSchoolHistory, studentObj, detailStudent, timelineMarks, timelineRemarks, timelineHealth, studentHistory, reportCards]);
+
+  const currentGrade = studentObj?.grade || (studentObj?.current_class && studentObj.current_class !== 'Unassigned' ? studentObj.current_class.split('-')[0] : null);
+  const uniqueGrades = useMemo(() => {
+    const gradesSet = new Set<string>();
+    
+    if (detailStudent?.grade) {
+      gradesSet.add(detailStudent.grade);
+    }
+    if (currentGrade) {
+      gradesSet.add(currentGrade);
+    }
+
+    schoolTenures.forEach((t: any) => {
+      if (t.grade_from) gradesSet.add(t.grade_from);
+      if (t.grade_to) gradesSet.add(t.grade_to);
+      
+      const snap = t.timeline_snapshot || {};
+      if (Array.isArray(snap.marks)) {
+        snap.marks.forEach((m: any) => { if (m.grade) gradesSet.add(m.grade); });
+      }
+      if (Array.isArray(snap.remarks)) {
+        snap.remarks.forEach((r: any) => { if (r.grade) gradesSet.add(r.grade); });
+      }
+      if (Array.isArray(snap.health)) {
+        snap.health.forEach((h: any) => { if (h.grade) gradesSet.add(h.grade); });
+      }
+      if (Array.isArray(snap.history)) {
+        snap.history.forEach((h: any) => { if (h.grade_name) gradesSet.add(h.grade_name); });
+      }
+      if (Array.isArray(snap.report_cards)) {
+        snap.report_cards.forEach((rc: any) => { if (rc.grade_name) gradesSet.add(rc.grade_name); });
+      }
+    });
+
+    const allGrades = Array.from(gradesSet).filter(Boolean);
+    
+    let max = 0;
+    allGrades.forEach(g => {
+      const num = parseInt(g, 10);
+      if (!isNaN(num) && num > max) {
+        max = num;
+      }
+    });
+    
+    const hasLKG = allGrades.includes('LKG');
+    const hasUKG = allGrades.includes('UKG');
+    
+    const list: string[] = [];
+    if (hasLKG) list.push('LKG');
+    if (hasUKG) list.push('UKG');
+    const endGrade = max || 10;
+    for (let i = 1; i <= endGrade; i++) {
+      list.push(i.toString());
+    }
+    return list;
+  }, [schoolTenures, detailStudent, currentGrade]);
+
+  const parseGrade = (g: string) => {
+    if (g === 'LKG') return -2;
+    if (g === 'UKG') return -1;
+    const num = parseInt(g, 10);
+    return isNaN(num) ? 99 : num;
+  };
+
+  const sortedGrades = uniqueGrades;
+
+  const getTenureGrades = (tenure: any) => {
+    const grades = new Set<string>();
+    if (tenure?.timeline_snapshot?.history) {
+      tenure.timeline_snapshot.history.forEach((h: any) => {
+        if (h.grade_name) grades.add(h.grade_name);
+      });
+    }
+    if (tenure?.timeline_snapshot?.marks) {
+      tenure.timeline_snapshot.marks.forEach((m: any) => {
+        if (m.grade) grades.add(m.grade);
+      });
+    }
+    if (tenure?.timeline_snapshot?.remarks) {
+      tenure.timeline_snapshot.remarks.forEach((r: any) => {
+        if (r.grade) grades.add(r.grade);
+      });
+    }
+    if (tenure?.timeline_snapshot?.health) {
+      tenure.timeline_snapshot.health.forEach((h: any) => {
+        if (h.grade) grades.add(h.grade);
+      });
+    }
+    if (tenure?.timeline_snapshot?.report_cards) {
+      tenure.timeline_snapshot.report_cards.forEach((c: any) => {
+        if (c.grade_name) grades.add(c.grade_name);
+      });
+    }
+    if (tenure?.status === 'ACTIVE' && currentGrade) {
+      grades.add(currentGrade);
+    }
+    if (detailStudent?.grade) {
+      grades.add(detailStudent.grade);
+    }
+
+    let max = 0;
+    grades.forEach(g => {
+      const num = parseInt(g, 10);
+      if (!isNaN(num) && num > max) {
+        max = num;
+      }
+    });
+
+    const hasLKG = grades.has('LKG');
+    const hasUKG = grades.has('UKG');
+
+    const list: string[] = [];
+    if (hasLKG) list.push('LKG');
+    if (hasUKG) list.push('UKG');
+    const endGrade = max || 10;
+    for (let i = 1; i <= endGrade; i++) {
+      list.push(i.toString());
+    }
+    return list;
+  };
+
+  useEffect(() => {
+    if (schoolTenures.length > 0) {
+      const updatedTenure = schoolTenures.find((t: any) => t.id === selectedTenure?.id) || 
+                            schoolTenures.find((t: any) => t.status === 'ACTIVE') || 
+                            schoolTenures[schoolTenures.length - 1];
+      setSelectedTenure(updatedTenure);
+      
+      const activeGrades = getTenureGrades(updatedTenure);
+      if (activeGrades.length > 0 && (!selectedGrade || !activeGrades.includes(selectedGrade))) {
+        setSelectedGrade(activeGrades[activeGrades.length - 1]);
+      }
+    }
+  }, [crossSchoolHistory, studentHistory, studentObj, timelineMarks, timelineRemarks, timelineHealth, reportCards]);
+
+  // When the user drags the slider to a grade that belongs to a DIFFERENT tenure
+  // (e.g. a re-admitted student: Tenure #1 = Grade 1-10, Tenure #2 = Grade 11-12),
+  // automatically switch selectedTenure to the one that owns that grade so the
+  // correct timeline_snapshot data is read.
+  useEffect(() => {
+    if (!selectedGrade || schoolTenures.length <= 1) return;
+    const owningTenure = schoolTenures.find((t: any) => {
+      const grades = getTenureGrades(t);
+      return grades.includes(selectedGrade);
+    });
+    if (owningTenure && owningTenure.id !== selectedTenure?.id) {
+      setSelectedTenure(owningTenure);
+    }
+  }, [selectedGrade, schoolTenures]);
+
+  const updateGradeFromY = (clientY: number) => {
+    if (!trackRef.current || sortedGrades.length <= 1) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    const trackHeight = rect.height;
+    let relativeY = clientY - rect.top;
+    relativeY = Math.max(0, Math.min(relativeY, trackHeight));
+    const ratio = relativeY / trackHeight;
+    const index = Math.round((1 - ratio) * (sortedGrades.length - 1));
+    const clampedIndex = Math.max(0, Math.min(index, sortedGrades.length - 1));
+    setSelectedGrade(sortedGrades[clampedIndex]);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    updateGradeFromY(e.clientY);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches[0]) {
+      setIsDragging(true);
+      updateGradeFromY(e.touches[0].clientY);
+    }
+  };
+
+  useEffect(() => {
+    if (isDragging) {
+      const handleGlobalMouseMove = (e: MouseEvent) => {
+        updateGradeFromY(e.clientY);
+      };
+      const handleGlobalMouseUp = () => {
+        setIsDragging(false);
+      };
+      const handleGlobalTouchMove = (e: TouchEvent) => {
+        if (e.touches[0]) {
+          updateGradeFromY(e.touches[0].clientY);
+        }
+      };
+
+      window.addEventListener('mousemove', handleGlobalMouseMove);
+      window.addEventListener('mouseup', handleGlobalMouseUp);
+      window.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
+      window.addEventListener('touchend', handleGlobalMouseUp);
+
+      return () => {
+        window.removeEventListener('mousemove', handleGlobalMouseMove);
+        window.removeEventListener('mouseup', handleGlobalMouseUp);
+        window.removeEventListener('touchmove', handleGlobalTouchMove);
+        window.removeEventListener('touchend', handleGlobalMouseUp);
+      };
+    }
+  }, [isDragging]);
+
+  const graduationYears = useMemo(() => {
+    const fromAlumni = alumni.map(a => a.academic_year).filter(Boolean);
+    const fromSettings = settings?.available_academic_years || [];
+    return [...new Set([...fromAlumni, ...fromSettings])].sort().reverse();
+  }, [alumni, settings]);
+
 
   if (loading) {
     return (
@@ -263,9 +645,12 @@ export default function AlumniPage() {
                         <div className="h-10 w-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shadow-inner">
                           <GraduationCap className="h-5 w-5 text-indigo-600" />
                         </div>
-                        <div className="ml-3 font-semibold text-slate-800 hover:text-indigo-600 transition-colors">
+                        <button 
+                          onClick={() => handleOpenDetail(alumnus)}
+                          className="ml-3 font-bold text-slate-850 hover:text-indigo-650 hover:underline transition-colors text-left"
+                        >
                           {alumnus.student_name}
-                        </div>
+                        </button>
                       </div>
                     </td>
                     
@@ -399,6 +784,486 @@ export default function AlumniPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Student Academic Timeline Detail Modal */}
+      {isDetailOpen && detailStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/60 backdrop-blur-md transition-opacity">
+          <div className="bg-white h-full w-full max-w-4xl shadow-2xl border-l border-slate-100 flex flex-col justify-between overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-purple-700 to-indigo-800 p-6 text-white relative shrink-0">
+              <button 
+                onClick={() => { setIsDetailOpen(false); setDetailStudent(null); }}
+                className="absolute right-4 top-4 p-1.5 bg-white/20 hover:bg-white/30 rounded-xl transition-colors text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-white/20 rounded-2xl">
+                  <GraduationCap className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-extrabold tracking-tight">{detailStudent.student_name}</h2>
+                  <p className="text-indigo-150 text-xs font-semibold mt-0.5">SUID Reference: {detailStudent.student_suid}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Scrollable Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {timelineLoading ? (
+                <div className="flex flex-col items-center justify-center py-24 space-y-3">
+                  <Loader2 className="animate-spin text-purple-600 h-10 w-10" />
+                  <p className="text-sm font-semibold text-slate-500">Retrieving full academic journey...</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Journey Stats Banner */}
+                  <div className="bg-gradient-to-br from-purple-600 to-indigo-700 p-6 rounded-2xl text-white shadow-md">
+                    <h3 className="text-xl font-bold mb-1">🎓 Student Journey</h3>
+                    <p className="text-purple-100 text-xs font-semibold">
+                      {schoolTenures.flatMap((t: any) => t.timeline_snapshot?.history || []).length > 0 
+                        ? `${schoolTenures.flatMap((t: any) => t.timeline_snapshot?.history || []).length} years of academic excellence`
+                        : `No historical records`
+                      }
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-3 text-xs">
+                      <div className="bg-white/20 px-3 py-1 rounded-full font-bold">
+                        🏆 {schoolTenures.reduce((sum, t) => sum + (t.timeline_snapshot?.history?.reduce((s: number, y: any) => s + (y.awards_count || 0), 0) || 0), 0)} Awards
+                      </div>
+                      <div className="bg-white/20 px-3 py-1 rounded-full font-bold">
+                        📜 {schoolTenures.reduce((sum, t) => sum + (t.timeline_snapshot?.history?.reduce((s: number, y: any) => s + (y.certificates_count || 0), 0) || 0), 0)} Certificates
+                      </div>
+                      <div className="bg-white/20 px-3 py-1 rounded-full font-bold">
+                        ⭐ {schoolTenures.reduce((sum, t) => sum + (t.timeline_snapshot?.history?.reduce((s: number, y: any) => s + (y.net_karma || 0), 0) || 0), 0)} Karma Points
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Personal Info & Guardians row */}
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="bg-white p-4 rounded-xl border border-slate-200">
+                      <h4 className="font-bold text-slate-900 mb-3 flex items-center gap-2 text-xs uppercase tracking-wider">
+                        <User size={14} className="text-blue-600" /> Personal Information
+                      </h4>
+                      <div className="grid grid-cols-2 gap-3 text-xs text-slate-700">
+                        <div><span className="text-slate-400">Admission No:</span> <span className="font-bold block mt-0.5">{studentObj?.admission_number || '--'}</span></div>
+                        <div><span className="text-slate-400">DOB:</span> <span className="font-bold block mt-0.5">{fullProfile?.date_of_birth || '--'}</span></div>
+                        <div><span className="text-slate-400">Gender:</span> <span className="font-bold block mt-0.5">{fullProfile?.gender === 'M' ? 'Male' : fullProfile?.gender === 'F' ? 'Female' : '--'}</span></div>
+                        <div><span className="text-slate-400">Blood Group:</span> <span className="font-bold block mt-0.5">{fullProfile?.blood_group || '--'}</span></div>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-white p-4 rounded-xl border border-slate-200">
+                      <h4 className="font-bold text-slate-900 mb-3 flex items-center gap-2 text-xs uppercase tracking-wider">
+                        👨‍👩‍👧 Parents / Guardians
+                      </h4>
+                      {guardians.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic">No parent details logged.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {guardians.map((g: any) => (
+                            <div key={g.id} className="flex items-center gap-2 text-xs text-slate-700">
+                              <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-[10px]">{g.name?.[0]}</div>
+                              <div className="flex-1">
+                                <span className="font-bold">{g.name}</span>
+                                <span className="text-slate-405 ml-1.5 font-medium">({g.relationship})</span>
+                              </div>
+                              <span className="text-slate-500 text-[10px] font-mono">{g.phone}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Multi-School Academic Timeline Dashboard */}
+                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                    <div className="p-4 border-b border-slate-100 bg-slate-50/75 flex justify-between items-center">
+                      <div>
+                        <h4 className="font-bold text-slate-900 flex items-center gap-2 text-sm">
+                          <GraduationCap size={16} className="text-purple-600" /> Multi-School Academic Journey
+                        </h4>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Choose school chapter or drag the timeline slider on the right to navigate years.</p>
+                      </div>
+                      {selectedGrade && (
+                        <span className="text-[10px] bg-purple-100 text-purple-700 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          Viewing Grade: {selectedGrade}
+                        </span>
+                      )}
+                    </div>
+
+                    {schoolTenures.length > 0 ? (
+                      <div className="grid grid-cols-[1fr_70px] gap-0 min-h-[400px]">
+                        {/* Left Panel: Grade Details */}
+                        <div className="p-4 border-r border-slate-100 space-y-5 overflow-y-auto max-h-[500px]">
+                          {selectedGrade ? (
+                            (() => {
+                              const currentMarks = (selectedTenure?.timeline_snapshot?.marks || []).filter((m: any) => m.grade === selectedGrade);
+                              const currentRemarks = (selectedTenure?.timeline_snapshot?.remarks || []).filter((r: any) => r.grade === selectedGrade);
+                              const currentHealth = (selectedTenure?.timeline_snapshot?.health || []).filter((h: any) => h.grade === selectedGrade);
+                              const currentReportCards = (selectedTenure?.timeline_snapshot?.report_cards || []).filter((c: any) => c.grade_name === selectedGrade);
+                              const currentHistory = (selectedTenure?.timeline_snapshot?.history || []).filter((h: any) => h.grade_name === selectedGrade);
+                              
+                              const att = (() => {
+                                // 1. Prefer live DB records (StudentAttendance rows are retained after graduation)
+                                if (dynamicAttendance && dynamicAttendance.total_days > 0) {
+                                  return dynamicAttendance;
+                                }
+                                // 2. Fall back to attendance_percentage stored in the mark snapshot
+                                const mWithAtt = currentMarks.find((m: any) => m.attendance_percentage !== null && m.attendance_percentage !== undefined);
+                                if (mWithAtt) {
+                                  return {
+                                    percentage: parseFloat(mWithAtt.attendance_percentage || 0),
+                                    days_present: mWithAtt.days_present || 0,
+                                    total_days: mWithAtt.total_days || 0,
+                                    days_absent: (mWithAtt.total_days || 0) - (mWithAtt.days_present || 0)
+                                  };
+                                }
+                                // 3. Fall back to attendance summary in the StudentHistory snapshot
+                                const histMatch = currentHistory.find((h: any) => h.attendance_percentage !== null && h.attendance_percentage !== undefined);
+                                if (histMatch) {
+                                  return {
+                                    percentage: parseFloat(histMatch.attendance_percentage || 0),
+                                    days_present: histMatch.days_present || 0,
+                                    total_days: histMatch.total_working_days || 0,
+                                    days_absent: histMatch.days_absent || 0
+                                  };
+                                }
+                                return null;
+                              })();
+
+                              return (
+                                <div className="space-y-5">
+                                  {/* Year-End Performance Summary */}
+                                  {currentHistory.length > 0 && (
+                                    <div className="bg-gradient-to-br from-indigo-50 to-purple-50 p-4 rounded-xl border border-indigo-100/80 space-y-3 shadow-sm">
+                                      <div className="flex justify-between items-start">
+                                        <div>
+                                          <h5 className="font-bold text-indigo-900 text-[10px] uppercase tracking-wider mb-0.5 flex items-center gap-1.5">
+                                            🎓 Year-End Performance Summary
+                                          </h5>
+                                          <p className="text-[9px] text-indigo-600 font-bold">Academic Year: {currentHistory[0].academic_year_name}</p>
+                                        </div>
+                                        {currentHistory[0].overall_grade && (
+                                          <span className="px-2 py-0.5 bg-indigo-650 text-white font-extrabold rounded-full text-[10px] shadow-sm">
+                                            Grade {currentHistory[0].overall_grade}
+                                          </span>
+                                        )}
+                                      </div>
+                                      
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center text-xs">
+                                        {currentHistory[0].percentage !== null && currentHistory[0].percentage !== undefined && (
+                                          <div className="bg-white p-2 rounded-lg border border-indigo-50/50">
+                                            <div className="font-extrabold text-slate-800 text-[11px]">{parseFloat(currentHistory[0].percentage).toFixed(1)}%</div>
+                                            <div className="text-[8px] uppercase font-bold text-slate-400">Percentage</div>
+                                          </div>
+                                        )}
+                                        {currentHistory[0].total_marks !== null && currentHistory[0].total_marks !== undefined && (
+                                          <div className="bg-white p-2 rounded-lg border border-indigo-50/50">
+                                            <div className="font-extrabold text-slate-800 text-[11px]">{parseFloat(currentHistory[0].total_marks).toFixed(0)}</div>
+                                            <div className="text-[8px] uppercase font-bold text-slate-400">Total Marks</div>
+                                          </div>
+                                        )}
+                                        {currentHistory[0].class_rank !== null && currentHistory[0].class_rank !== undefined && (
+                                          <div className="bg-white p-2 rounded-lg border border-indigo-50/50">
+                                            <div className="font-extrabold text-slate-800 text-[11px]">#{currentHistory[0].class_rank}</div>
+                                            <div className="text-[8px] uppercase font-bold text-slate-400">Class Rank</div>
+                                          </div>
+                                        )}
+                                        {currentHistory[0].grade_rank !== null && currentHistory[0].grade_rank !== undefined && (
+                                          <div className="bg-white p-2 rounded-lg border border-indigo-50/50">
+                                            <div className="font-extrabold text-slate-800 text-[11px]">#{currentHistory[0].grade_rank}</div>
+                                            <div className="text-[8px] uppercase font-bold text-slate-400">Grade Rank</div>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {currentHistory[0].teacher_remarks && (
+                                        <div className="bg-white p-2.5 rounded-lg border border-indigo-100/50 text-[11px]">
+                                          <span className="text-[9px] font-extrabold text-indigo-900 block mb-1">✍️ Class Teacher's Remarks</span>
+                                          <p className="text-slate-600 italic font-medium font-sans">"{currentHistory[0].teacher_remarks}"</p>
+                                          {currentHistory[0].class_teacher_name && (
+                                            <span className="text-[8px] text-slate-400 block mt-1.5 text-right">— {currentHistory[0].class_teacher_name}</span>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* 1. Attendance */}
+                                  <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-150">
+                                    <h5 className="font-bold text-slate-800 text-[10px] uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                      <Calendar size={13} className="text-blue-500" /> Attendance Statistics
+                                    </h5>
+                                    {att ? (
+                                      <div className="space-y-3">
+                                        {att.total_days > 0 && (
+                                          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                                            <div className="bg-white p-2 rounded-lg border border-slate-100">
+                                              <div className="font-bold text-slate-800">{att.total_days}</div>
+                                              <div className="text-[9px] uppercase font-bold text-slate-400">Total Days</div>
+                                            </div>
+                                            <div className="bg-green-50/50 p-2 rounded-lg border border-green-100/50">
+                                              <div className="font-bold text-green-600">{att.days_present}</div>
+                                              <div className="text-[9px] uppercase font-bold text-green-500">Present</div>
+                                            </div>
+                                            <div className="bg-red-50/50 p-2 rounded-lg border border-red-100/50">
+                                              <div className="font-bold text-red-500">{att.days_absent}</div>
+                                              <div className="text-[9px] uppercase font-bold text-red-700">Absent</div>
+                                            </div>
+                                          </div>
+                                        )}
+                                        <div>
+                                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                                            <div
+                                              className={`h-full rounded-full transition-all duration-500 ${
+                                                att.percentage >= 75 ? 'bg-green-500' : 'bg-red-500'
+                                              }`}
+                                              style={{ width: `${att.percentage}%` }}
+                                            />
+                                          </div>
+                                          <div className="flex justify-between items-center mt-1.5 text-[10px]">
+                                            <span className="text-slate-400">Target: 75%</span>
+                                            <span className="font-bold text-slate-700">{att.percentage.toFixed(1)}% Present</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <p className="text-xs text-slate-400 italic">No attendance records found for Grade {selectedGrade}.</p>
+                                    )}
+                                  </div>
+
+                                  {/* 2. Results */}
+                                  <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-150">
+                                    <h5 className="font-bold text-slate-800 text-[10px] uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                      <FileText size={13} className="text-purple-500" /> Academic Results
+                                    </h5>
+                                    
+                                    {currentReportCards.length > 0 && (
+                                      <div className="mb-3 space-y-2">
+                                        {currentReportCards.map((card: any) => (
+                                          <div key={card.id} className="flex justify-between items-center p-2.5 bg-purple-50/50 rounded-xl border border-purple-100/50 text-xs">
+                                            <div>
+                                              <span className="font-bold text-purple-900">{card.term_name} Report Card</span>
+                                              <p className="text-[10px] text-purple-700 font-semibold mt-0.5">
+                                                Total Score: {parseFloat(card.total_marks_obtained).toFixed(0)}/{parseFloat(card.total_marks_possible).toFixed(0)} ({parseFloat(card.percentage).toFixed(1)}%)
+                                              </p>
+                                            </div>
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-700">Grade: {card.grade_awarded}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {currentMarks.length > 0 ? (
+                                      <div className="overflow-x-auto border border-slate-100 rounded-lg bg-white">
+                                        <table className="min-w-full divide-y divide-slate-100">
+                                          <thead className="bg-slate-50/50 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                                            <tr>
+                                              <th className="px-3 py-1.5 text-left">Subject</th>
+                                              <th className="px-3 py-1.5 text-left">Exam</th>
+                                              <th className="px-3 py-1.5 text-center">Score</th>
+                                              <th className="px-3 py-1.5 text-center">Status</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+                                            {currentMarks.map((mark: any, midx: number) => (
+                                              <tr key={mark.id || midx} className="hover:bg-slate-50/20">
+                                                <td className="px-3 py-2 font-bold text-slate-800">{mark.subject}</td>
+                                                <td className="px-3 py-2 text-slate-500">{mark.exam_name}</td>
+                                                <td className="px-3 py-2 text-center font-mono font-bold">
+                                                  {mark.is_absent ? (
+                                                    <span className="text-red-500">Absent</span>
+                                                  ) : (
+                                                    `${parseFloat(mark.marks_obtained).toFixed(0)}/${parseFloat(mark.total_marks).toFixed(0)}`
+                                                  )}
+                                                </td>
+                                                <td className="px-3 py-2 text-center">
+                                                  {mark.is_absent ? (
+                                                    <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Abs</span>
+                                                  ) : mark.is_pass ? (
+                                                    <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Pass</span>
+                                                  ) : (
+                                                    <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Fail</span>
+                                                  )}
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    ) : (
+                                      <p className="text-xs text-slate-400 italic">No subject marks recorded for Grade {selectedGrade}.</p>
+                                    )}
+                                  </div>
+
+                                  {/* 3. Conduct & Remarks */}
+                                  <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-150">
+                                    <h5 className="font-bold text-slate-800 text-[10px] uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                      <Trophy size={13} className="text-yellow-500" /> Behavior, Remarks & Achievements
+                                    </h5>
+                                    {currentRemarks.length > 0 ? (
+                                      <div className="relative border-l border-slate-200 pl-3 ml-1.5 space-y-3">
+                                        {currentRemarks.map((rem: any, ridx: number) => {
+                                          const isNegative = rem.points && rem.points < 0;
+                                          const isPositive = rem.points && rem.points > 0;
+                                          return (
+                                            <div key={rem.id || ridx} className="relative text-xs">
+                                              <div className={`absolute -left-[17px] top-1 w-2.5 h-2.5 rounded-full border border-white shadow-sm ${
+                                                isNegative ? 'bg-red-500' :
+                                                isPositive ? 'bg-green-500' :
+                                                rem.record_type === 'ACHIEVEMENT' || rem.record_type === 'AWARD' ? 'bg-yellow-500' :
+                                                'bg-blue-500'
+                                              }`} />
+                                              <div className={`p-2.5 rounded-lg border ${
+                                                isNegative ? 'bg-red-50/50 border-red-100' :
+                                                isPositive ? 'bg-green-50/50 border-green-100' :
+                                                rem.record_type === 'ACHIEVEMENT' || rem.record_type === 'AWARD' ? 'bg-yellow-50/20 border-yellow-100' :
+                                                'bg-white border-slate-200'
+                                              }`}>
+                                                <div className="font-bold text-slate-800">{rem.title || rem.record_type}</div>
+                                                {rem.description && <p className="text-slate-500 text-[10px] mt-0.5">{rem.description}</p>}
+                                                <div className="flex justify-between items-center text-[9px] text-slate-400 mt-2">
+                                                  <span>By: <span className="font-semibold text-slate-500">{rem.teacher_name || 'System'}</span></span>
+                                                  {rem.points && (
+                                                    <span className={`font-mono font-bold ${isNegative ? 'text-red-650' : 'text-green-650'}`}>
+                                                      {rem.points > 0 ? `+${rem.points}` : rem.points} Karma
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <p className="text-xs text-slate-400 italic">No remarks logged for Grade {selectedGrade}.</p>
+                                    )}
+                                  </div>
+
+                                  {/* 4. Health Visits */}
+                                  <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-150">
+                                    <h5 className="font-bold text-slate-800 text-[10px] uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                      <Heart size={13} className="text-red-500" /> Infirmary & Clinic Visits
+                                    </h5>
+                                    {currentHealth.length > 0 ? (
+                                      <div className="space-y-2">
+                                        {currentHealth.map((visit: any, vidx: number) => (
+                                          <div key={visit.id || vidx} className="p-2.5 bg-white border border-slate-100 rounded-lg flex gap-2 text-xs">
+                                            <div className="text-red-500 bg-red-50 p-1.5 rounded-lg h-7 w-7 flex items-center justify-center shrink-0">
+                                              <Thermometer size={14} />
+                                            </div>
+                                            <div className="flex-1 space-y-1">
+                                              <div className="flex justify-between">
+                                                <span className="font-bold text-slate-800">{visit.symptom}</span>
+                                                <span className="text-[9px] text-slate-400">{new Date(visit.visit_date).toLocaleDateString()}</span>
+                                              </div>
+                                              <p className="text-[10px] text-slate-500">Treatment: {visit.treatment_given}</p>
+                                              <div className="flex justify-between items-center text-[9px] text-slate-400">
+                                                <span>Nurse: <span className="font-semibold text-slate-500">{visit.recorded_by}</span></span>
+                                                {visit.sent_home && <span className="bg-orange-100 text-orange-850 px-1 py-0.2 rounded font-black uppercase text-[8px]">Sent Home</span>}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-xs text-slate-400 italic">No infirmary visit records for Grade {selectedGrade}.</p>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-2 py-16">
+                              <GraduationCap size={40} className="opacity-40 animate-pulse text-purple-600" />
+                              <p className="text-xs font-semibold">Select a grade from the timeline track to load details.</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Right Panel: Discrete draggable vertical selector track */}
+                        <div className="bg-slate-50/70 py-6 flex flex-col items-center select-none relative border-l border-slate-150">
+                          <div 
+                            ref={trackRef}
+                            onMouseDown={handleMouseDown}
+                            onTouchStart={handleTouchStart}
+                            className="relative flex-1 w-1 bg-slate-200 rounded-full cursor-ns-resize hover:bg-slate-300 transition-colors py-2 flex flex-col items-center justify-between"
+                          >
+                            {sortedGrades.length > 1 && selectedGrade && (
+                              <div 
+                                className="absolute top-0 bottom-0 left-0 right-0 rounded-full bg-gradient-to-b from-purple-500 via-indigo-500 to-blue-500"
+                                style={{
+                                  top: `${((sortedGrades.length - 1 - sortedGrades.indexOf(selectedGrade)) / (sortedGrades.length - 1)) * 100}%`,
+                                  bottom: '0%'
+                                }}
+                              />
+                            )}
+
+                            {sortedGrades.map((g: string, i: number) => {
+                              const isActive = g === selectedGrade;
+                              const yPosPercent = sortedGrades.length > 1 
+                                ? ((sortedGrades.length - 1 - i) / (sortedGrades.length - 1)) * 100 
+                                : 50;
+
+                              return (
+                                <button
+                                  key={g}
+                                  onClick={() => setSelectedGrade(g)}
+                                  style={{ top: `${yPosPercent}%` }}
+                                  className={`absolute -translate-x-1/2 -translate-y-1/2 left-1/2 w-5.5 h-5.5 rounded-full flex items-center justify-center font-bold text-[9px] shadow-sm transition-all duration-300 border-2 ${
+                                    isActive 
+                                      ? 'bg-purple-600 border-white text-white scale-110 ring-2 ring-purple-300/40 z-25' 
+                                      : 'bg-white border-slate-300 text-slate-500 hover:border-purple-400 hover:text-purple-650 scale-100 z-20'
+                                  }`}
+                                >
+                                  {g === 'LKG' ? 'L' : g === 'UKG' ? 'U' : g}
+                                </button>
+                              );
+                            })}
+
+                            {sortedGrades.length > 0 && selectedGrade && (
+                              <div
+                                style={{ 
+                                  top: `${sortedGrades.length > 1 ? ((sortedGrades.length - 1 - sortedGrades.indexOf(selectedGrade)) / (sortedGrades.length - 1)) * 100 : 50}%`,
+                                  cursor: 'ns-resize'
+                                }}
+                                className={`absolute -translate-x-1/2 -translate-y-1/2 left-1/2 w-7 h-7 rounded-full border-2 border-white shadow-lg bg-gradient-to-tr from-purple-600 to-indigo-650 z-30 transition-transform flex items-center justify-center text-white text-[9px] font-black ${
+                                  isDragging ? 'scale-110 shadow-purple-500/50' : 'scale-100 shadow-gray-400'
+                                }`}
+                              >
+                                {selectedGrade === 'LKG' ? 'L' : selectedGrade === 'UKG' ? 'U' : selectedGrade}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-[8px] uppercase font-black text-slate-400 mt-2 tracking-wider text-center select-none">
+                            Timeline
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-16 text-center text-slate-400 bg-slate-50/50">
+                        <GraduationCap size={48} className="mx-auto mb-3 opacity-30 text-purple-600 animate-pulse" />
+                        <h5 className="font-bold text-slate-700 mb-1">No Academic Timeline Data</h5>
+                        <p className="text-[11px] text-slate-500">Timeline data will populate as marks and conduct scores are recorded in their classes.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 bg-slate-50 border-t border-slate-100 shrink-0">
+              <button 
+                onClick={() => { setIsDetailOpen(false); setDetailStudent(null); }}
+                className="w-full py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-2xl transition-all"
+              >
+                Close Timeline
+              </button>
+            </div>
           </div>
         </div>
       )}

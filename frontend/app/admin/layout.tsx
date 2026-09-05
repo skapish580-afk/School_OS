@@ -1,7 +1,9 @@
 'use client';
 
-import { Sidebar } from '@/components/Sidebar';
-import { Navbar } from '@/components/Navbar';
+import Sidebar from '@/components/Sidebar';
+import Navbar from '@/components/Navbar';
+import { PermissionProvider } from '@/lib/rbac-context';
+import { FeatureProvider } from '@/lib/FeatureContext';
 
 export default function AdminLayout({
   children,
@@ -9,14 +11,18 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-screen bg-gray-50">
-      <Sidebar />
-      <div className="flex-1 flex flex-col">
-        <Navbar />
-        <main className="flex-1 overflow-auto">
-          {children}
-        </main>
-      </div>
-    </div>
+    <PermissionProvider>
+      <FeatureProvider>
+        <div className="flex h-screen bg-gray-50">
+          <Sidebar />
+          <div className="flex-1 flex flex-col">
+            <Navbar />
+            <main className="flex-1 overflow-auto">
+              {children}
+            </main>
+          </div>
+        </div>
+      </FeatureProvider>
+    </PermissionProvider>
   );
 }

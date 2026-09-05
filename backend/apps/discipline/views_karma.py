@@ -13,6 +13,62 @@ from apps.schools.models import School
 from apps.accounts.permission_utils import RBACPermission
 
 
+def _get_active_academic_year(school=None):
+    """
+    Resolve the currently active academic year string for a school.
+    Priority: SchoolSettings.current_academic_year -> AcademicYear(status=ACTIVE) -> ''
+    """
+    if school:
+        try:
+            from apps.schools.models_settings import SchoolSettings
+            settings_obj = SchoolSettings.objects.filter(school=school).first()
+            if settings_obj and settings_obj.current_academic_year:
+                return settings_obj.current_academic_year
+        except Exception:
+            pass
+
+    try:
+        from apps.enrollments.models_promotion import AcademicYear
+        qs = AcademicYear.objects.filter(status='ACTIVE')
+        if school:
+            qs = qs.filter(school=school)
+        active_year = qs.order_by('-created_at').first()
+        if active_year:
+            return active_year.year_code
+    except Exception:
+        pass
+
+    return ''
+
+
+from rest_framework import permissions
+
+class DisciplineActionPermission(permissions.BasePermission):
+    """
+    Custom permission for Discipline:
+    - Safe methods (GET, HEAD, OPTIONS): requires students.view_student_only, view_profile, or view_journey or admin
+    - Write methods (POST, PUT, PATCH, DELETE): requires students.manage_behavior or admin
+    """
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+            
+        if user.user_type in ['PLATFORM_ADMIN', 'SCHOOL_ADMIN', 'ADMIN']:
+            return True
+            
+        from apps.accounts.permission_utils import has_permission
+        
+        if request.method in permissions.SAFE_METHODS or view.action in ['summary', 'karma_history']:
+            return (
+                has_permission(user, 'students.view_student_only') or
+                has_permission(user, 'students.view_profile') or
+                has_permission(user, 'students.view_journey')
+            )
+        else:
+            return has_permission(user, 'students.manage_behavior')
+
+
 class StudentKarmaViewSet(viewsets.ModelViewSet):
     """
     Karma management for class teachers
@@ -21,14 +77,7 @@ class StudentKarmaViewSet(viewsets.ModelViewSet):
     - Admins have full access
     """
     serializer_class = StudentKarmaSerializer
-    permission_classes = [IsAuthenticated, RBACPermission]
-    
-    # RBAC Configuration
-    rbac_module = 'discipline'
-    rbac_resource = 'karma'
-    rbac_action_permissions = {
-        'bulk_add': 'discipline.create_karma',
-    }
+    permission_classes = [IsAuthenticated, DisciplineActionPermission]
     
     def get_queryset(self):
         user = self.request.user
@@ -86,7 +135,7 @@ class StudentKarmaViewSet(viewsets.ModelViewSet):
             school=school,
             grade=current_enrollment.grade,
             section=current_enrollment.section,
-            academic_year='2025-2026'  # TODO: Get from school settings
+            academic_year=_get_active_academic_year(school)
         )
     
     def perform_update(self, serializer):
@@ -157,7 +206,7 @@ class StudentKarmaViewSet(viewsets.ModelViewSet):
         karma_records = StudentKarma.objects.filter(
             grade=class_assignment.grade,
             section=class_assignment.section,
-            academic_year='2025-2026'
+            academic_year=_get_active_academic_year(class_assignment.school)
         )
         
         # Calculate summary
@@ -211,7 +260,7 @@ def get_student_karma_summary(request, student_id):
             return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
         
         # Get karma records
-        karma_records = StudentKarma.objects.filter(student=student, academic_year='2025-2026')
+        karma_records = StudentKarma.objects.filter(student=student, academic_year=_get_active_academic_year())
         
         positive_sum = karma_records.filter(type='POSITIVE').aggregate(Sum('points'))['points__sum'] or 0
         negative_sum = karma_records.filter(type='NEGATIVE').aggregate(Sum('points'))['points__sum'] or 0
@@ -278,7 +327,7 @@ def bulk_add_karma(request):
                 category=category,
                 points=points,
                 remark=remark,
-                academic_year='2025-2026',
+                academic_year=_get_active_academic_year(class_assignment.school),
                 grade=enrollment.grade,
                 section=enrollment.section
             ))

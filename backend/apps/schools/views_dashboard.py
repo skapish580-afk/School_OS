@@ -81,9 +81,10 @@ class BroadcastNotificationViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
         return queryset.order_by('-created_at')
     
     def perform_create(self, serializer):
+        school = self.get_user_school()
         serializer.save(
             created_by=self.request.user,
-            school=self.request.user.school
+            school=school
         )
     
     @action(detail=False, methods=['post'])
@@ -98,7 +99,7 @@ class BroadcastNotificationViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
         
         data = serializer.validated_data
         user = request.user
-        school = user.school
+        school = self.get_user_school()
         
         if not school:
             return Response(
@@ -106,7 +107,7 @@ class BroadcastNotificationViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Count recipients
+        # Count recipients strictly for this school
         recipients_count = self._count_recipients(school, data['audience'], data.get('target_grades', []))
         
         # Create the broadcast
@@ -124,9 +125,6 @@ class BroadcastNotificationViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
             recipients_count=recipients_count
         )
         
-        # In a real app, you'd queue notifications here for push/email/SMS delivery
-        # For now, we just create the record
-        
         return Response({
             'success': True,
             'broadcast_id': str(broadcast.id),
@@ -136,26 +134,31 @@ class BroadcastNotificationViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
         }, status=status.HTTP_201_CREATED)
     
     def _count_recipients(self, school, audience, target_grades):
-        """Count how many users will receive this broadcast"""
+        """Count how many users in school S will receive this broadcast"""
         from apps.accounts.models import User
+        from apps.teachers.models import Teacher
+        from apps.students.models import Student
         
         count = 0
         
         if audience in ['TEACHERS', 'BOTH', 'ALL']:
-            teachers = User.objects.filter(school=school, user_type='TEACHER')
-            count += teachers.count()
+            teacher_users = User.objects.filter(school=school, user_type='TEACHER').count()
+            assoc_teachers = Teacher.objects.filter(
+                school_associations__school=school, 
+                school_associations__status='ACTIVE'
+            ).exclude(user__school=school).values('user').distinct().count()
+            count += (teacher_users + assoc_teachers)
         
         if audience in ['STUDENTS', 'BOTH', 'ALL']:
-            students = User.objects.filter(school=school, user_type='STUDENT')
-            if target_grades:
-                # Filter by grades - would need enrollment data
-                pass
-            count += students.count()
+            student_users = User.objects.filter(school=school, user_type='STUDENT').count()
+            profile_students = Student.objects.filter(
+                school=school
+            ).exclude(user__school=school).values('user').distinct().count()
+            count += (student_users + profile_students)
         
-        if audience == 'ALL':
-            # Include parents too
-            parents = User.objects.filter(school=school, user_type='PARENT')
-            count += parents.count()
+        if audience in ['PARENTS', 'ALL']:
+            parents = User.objects.filter(school=school, user_type='PARENT').count()
+            count += parents
         
         return count
     
@@ -192,13 +195,13 @@ class BroadcastNotificationViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def my_notifications(self, request):
         """
-        Get broadcasts relevant to the current user based on their role.
-        For teachers: TEACHERS, BOTH, ALL
-        For students: STUDENTS, BOTH, ALL
-        For school admins: ALL broadcasts they have access to
+        Get broadcasts relevant to the current user based on their role and school.
+        For teachers of school S: TEACHERS, BOTH, ALL
+        For students of school S: STUDENTS, BOTH, ALL
+        For school admins of school S: ALL broadcasts for school S
         """
         user = request.user
-        school = user.school
+        school = self.get_user_school()
         
         if not school:
             return Response([])
@@ -211,15 +214,14 @@ class BroadcastNotificationViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
             audiences.extend(['STUDENTS', 'BOTH'])
         elif user.user_type == 'PARENT':
             audiences.extend(['PARENTS', 'ALL'])
-        elif user.user_type in ['SCHOOL_ADMIN', 'PLATFORM_ADMIN']:
-            # Admins can see all notifications
+        elif user.user_type in ['SCHOOL_ADMIN', 'PLATFORM_ADMIN', 'ADMIN', 'ROLE']:
             audiences = ['TEACHERS', 'STUDENTS', 'BOTH', 'ALL', 'PARENTS']
         
         broadcasts = BroadcastNotification.objects.filter(
             school=school,
             audience__in=audiences,
             status='SENT'
-        ).order_by('-sent_at')[:20]
+        ).order_by('-sent_at')[:50]
         
         # Add read status for each
         data = []
@@ -236,7 +238,7 @@ class BroadcastNotificationViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
     def unread_count(self, request):
         """Get count of unread notifications for current user"""
         user = request.user
-        school = user.school
+        school = self.get_user_school()
         
         if not school:
             return Response({'count': 0})
@@ -247,7 +249,7 @@ class BroadcastNotificationViewSet(SchoolIsolationMixin, viewsets.ModelViewSet):
             audiences.extend(['TEACHERS', 'BOTH'])
         elif user.user_type == 'STUDENT':
             audiences.extend(['STUDENTS', 'BOTH'])
-        elif user.user_type in ['SCHOOL_ADMIN', 'PLATFORM_ADMIN']:
+        elif user.user_type in ['SCHOOL_ADMIN', 'PLATFORM_ADMIN', 'ADMIN', 'ROLE']:
             audiences = ['TEACHERS', 'STUDENTS', 'BOTH', 'ALL', 'PARENTS']
         
         total = BroadcastNotification.objects.filter(

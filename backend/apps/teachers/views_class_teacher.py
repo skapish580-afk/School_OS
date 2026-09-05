@@ -12,6 +12,7 @@ from apps.enrollments.models import StudentEnrollment
 from apps.attendance.models import StudentAttendance, AttendanceSession
 from apps.discipline.models import StudentKarma
 from apps.gatepass.models import GatePass
+from apps.core.school_isolation import get_user_school
 
 
 @api_view(['GET'])
@@ -150,9 +151,15 @@ def class_teacher_dashboard(request):
         # Students with low attendance (< 75% this month)
         month_start = today.replace(day=1)
         for student in students[:10]:  # Check first 10 for performance
+            from apps.schools.models_calendar import Holiday
+            holiday_dates = Holiday.objects.filter(school=get_user_school(request.user)).values_list('date', flat=True)
             student_attendance = StudentAttendance.objects.filter(
                 student=student,
                 session__date__gte=month_start
+            ).exclude(
+                session__date__week_day=1
+            ).exclude(
+                session__date__in=holiday_dates
             )
             total_days = student_attendance.count()
             if total_days > 0:
@@ -245,9 +252,15 @@ def class_student_details(request, student_id):
         today = timezone.now().date()
         month_start = today.replace(day=1)
         
+        from apps.schools.models_calendar import Holiday
+        holiday_dates = Holiday.objects.filter(school=get_user_school(request.user)).values_list('date', flat=True)
         attendance_records = StudentAttendance.objects.filter(
             student=student,
             session__date__gte=month_start
+        ).exclude(
+            session__date__week_day=1
+        ).exclude(
+            session__date__in=holiday_dates
         )
         
         total_days = attendance_records.count()

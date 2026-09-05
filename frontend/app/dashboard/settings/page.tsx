@@ -4,15 +4,34 @@ import { useState, useEffect } from 'react';
 import { useSettings } from '@/lib/SettingsContext';
 import { 
   Settings as SettingsIcon, Moon, Sun, Bell, Eye, EyeOff, 
-  Globe, Calendar, Palette, Shield, Save, Building2, IndianRupee, Mail, QrCode
+  Globe, Calendar, Palette, Save, Building2, IndianRupee, Mail, QrCode
 } from 'lucide-react';
+import api from '@/lib/api';
+import { toast } from 'react-hot-toast';
+import { usePermissionContext } from '@/lib/rbac-context';
+import { useRouter } from 'next/navigation';
 
 
 export default function SettingsPage() {
-  const { settings, loading, updateSettings } = useSettings();
+  const { permissions, loading: permissionsLoading } = usePermissionContext();
+  const router = useRouter();
+  const { settings, loading, updateSettings, refreshSettings } = useSettings();
+  
+  useEffect(() => {
+    if (!permissionsLoading && permissions?.user_type === 'ROLE') {
+      router.push('/dashboard');
+    }
+  }, [permissions, permissionsLoading, router]);
+
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general' | 'dashboard' | 'notifications' | 'privacy' | 'finance' | 'gatepass'>('general');
-  const [gatepassForm, setGatepassForm] = useState({ gatepass_sender_email: '', gatepass_app_password: '', gatepass_verification_base_url: '' });
+  const [uploading, setUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'general' | 'dashboard' | 'notifications' | 'finance' | 'gatepass'>('general');
+  const [gatepassForm, setGatepassForm] = useState<{
+    gatepass_sender_email?: string;
+    gatepass_app_password?: string;
+    gatepass_creation_email_body?: string;
+    gatepass_departure_email_body?: string;
+  }>({});
   const [gatepassSaving, setGatepassSaving] = useState(false);
   const [gatepassSaved, setGatepassSaved] = useState(false);
 
@@ -32,10 +51,18 @@ export default function SettingsPage() {
     }
   }, [settings]);
 
-  if (loading) {
+  if (loading || permissionsLoading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-gray-600 dark:text-gray-300">Loading settings...</div>
+      </div>
+    );
+  }
+
+  if (permissions?.user_type === 'ROLE') {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-red-500 font-bold">Access Denied</div>
       </div>
     );
   }
@@ -47,6 +74,62 @@ export default function SettingsPage() {
       </div>
     );
   }
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('school_logo', file);
+
+    setUploading(true);
+    try {
+      await api.patch(
+        '/schools/settings/update_my_settings/',
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      );
+      toast.success('Logo uploaded successfully!');
+      await refreshSettings();
+    } catch (error) {
+      console.error('Error uploading logo:', error);
+      toast.error('Failed to upload logo.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleLogoDelete = async () => {
+    const confirmDelete = window.confirm('Are you sure you want to remove the school logo?');
+    if (!confirmDelete) return;
+
+    const formData = new FormData();
+    formData.append('school_logo', 'null');
+
+    setUploading(true);
+    try {
+      await api.patch(
+        '/schools/settings/update_my_settings/',
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      );
+      toast.success('Logo removed successfully!');
+      await refreshSettings();
+    } catch (error) {
+      console.error('Error removing logo:', error);
+      toast.error('Failed to remove logo.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleToggle = async (key: keyof typeof settings, value: boolean) => {
     setSaving(true);
@@ -74,6 +157,23 @@ export default function SettingsPage() {
       setSaving(false);
     }
   };
+
+  const handleNumericSelectChange = async (key: string, value: number) => {
+    setSaving(true);
+    try {
+      await updateSettings({ [key]: value });
+    } catch (error) {
+      console.error('Error updating setting:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
@@ -105,7 +205,6 @@ export default function SettingsPage() {
                 { key: 'general', label: 'General', icon: Globe },
                 { key: 'dashboard', label: 'Dashboard', icon: Eye },
                 { key: 'notifications', label: 'Notifications', icon: Bell },
-                { key: 'privacy', label: 'Privacy', icon: Shield },
                 { key: 'finance', label: 'Finance', icon: IndianRupee },
                 { key: 'gatepass', label: 'Gate Pass', icon: QrCode },
               ].map(tab => {
@@ -133,6 +232,51 @@ export default function SettingsPage() {
             {activeTab === 'general' && (
               <div className="space-y-6">
                 <div>
+                  <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">School Logo</h3>
+                  <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg flex flex-col md:flex-row items-center gap-6">
+                    <div className="w-24 h-24 bg-white dark:bg-gray-800 rounded-xl border border-gray-250 dark:border-gray-600 flex items-center justify-center overflow-hidden shadow-inner relative group">
+                      {settings.school_logo ? (
+                        <img 
+                          src={settings.school_logo} 
+                          alt="School Logo" 
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <Building2 className="h-12 w-12 text-gray-300 dark:text-gray-600" />
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-3">
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        Upload your school logo in image format (PNG, JPEG preferred). The logo will automatically display in the header of all student report cards.
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <label className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg cursor-pointer transition text-sm flex items-center gap-2">
+                          <Building2 size={16} />
+                          {uploading ? 'Uploading...' : 'Upload Logo'}
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            onChange={handleLogoUpload} 
+                            disabled={uploading}
+                            className="hidden"
+                          />
+                        </label>
+                        {settings.school_logo && (
+                          <button
+                            type="button"
+                            onClick={handleLogoDelete}
+                            disabled={uploading}
+                            className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 font-semibold rounded-lg transition text-sm disabled:opacity-50"
+                          >
+                            Remove Logo
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
                   <h3 className="text-lg font-semibold mb-4">Regional Settings</h3>
                   
                   <div className="space-y-4">
@@ -150,9 +294,87 @@ export default function SettingsPage() {
                       </select>
                     </div>
 
+                    {/* Academic Year Cycle Definition */}
+                    <div className="p-4 bg-gray-50 rounded-lg space-y-4">
+
+                      <div>
+                        <label className="block font-medium mb-1 text-gray-900">Academic Year Start Date</label>
+                        <p className="text-xs text-gray-500 mb-2">Select the date and month when your school's academic session begins every year.</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <span className="text-xs font-semibold text-gray-500 uppercase">Start Month</span>
+                            <select
+                              value={settings.academic_year_start_month || 4}
+                              onChange={(e) => handleNumericSelectChange('academic_year_start_month', Number(e.target.value))}
+                              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white font-medium text-gray-900"
+                            >
+                              {MONTH_NAMES.map((name, index) => (
+                                <option key={index + 1} value={index + 1}>{name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <span className="text-xs font-semibold text-gray-500 uppercase">Start Day</span>
+                            <select
+                              value={settings.academic_year_start_day || 1}
+                              onChange={(e) => handleNumericSelectChange('academic_year_start_day', Number(e.target.value))}
+                              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white font-medium text-gray-900"
+                            >
+                              {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                                <option key={day} value={day}>{day}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-3 border-t border-gray-200">
+                        <label className="block font-medium mb-1 text-gray-900">Academic Year End Date</label>
+                        <p className="text-xs text-gray-500 mb-2">Select the date and month when your school's academic session ends every year.</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <span className="text-xs font-semibold text-gray-500 uppercase">End Month</span>
+                            <select
+                              value={settings.academic_year_end_month || 3}
+                              onChange={(e) => handleNumericSelectChange('academic_year_end_month', Number(e.target.value))}
+                              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white font-medium text-gray-900"
+                            >
+                              {MONTH_NAMES.map((name, index) => (
+                                <option key={index + 1} value={index + 1}>{name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <span className="text-xs font-semibold text-gray-500 uppercase">End Day</span>
+                            <select
+                              value={settings.academic_year_end_day || 31}
+                              onChange={(e) => handleNumericSelectChange('academic_year_end_day', Number(e.target.value))}
+                              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white font-medium text-gray-900"
+                            >
+                              {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                                <option key={day} value={day}>{day}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800 space-y-1">
+                        <div className="font-bold flex items-center gap-2">
+                          <Calendar size={14} /> Active Academic Cycle Definition:
+                        </div>
+                        <div>
+                          Runs annually from <strong>{MONTH_NAMES[(settings.academic_year_start_month || 4) - 1]} {settings.academic_year_start_day || 1}</strong> to <strong>{MONTH_NAMES[(settings.academic_year_end_month || 3) - 1]} {settings.academic_year_end_day || 31}</strong>.
+                        </div>
+                        <div>
+                          Current Session Code: <span className="font-mono bg-blue-100 px-1.5 py-0.5 rounded font-bold text-blue-900">{settings.current_academic_year || '2026-2027'}</span>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Academic Year Format */}
                     <div className="p-4 bg-gray-50 rounded-lg">
-                      <label className="block font-medium mb-2">Academic Year Format</label>
+                      <label className="block font-medium mb-2">Academic Year Display Format</label>
                       <select
                         value={settings.academic_year_format}
                         onChange={(e) => handleSelectChange('academic_year_format', e.target.value)}
@@ -174,6 +396,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </div>
+
 
                 <div>
                   <h3 className="text-lg font-semibold mb-4">School Location (Transport)</h3>
@@ -214,8 +437,8 @@ export default function SettingsPage() {
                       onClick={async () => {
                         setSavingLocation(true);
                         try {
-                          const latVal = localLatitude === '' ? null : parseFloat(localLatitude);
-                          const lngVal = localLongitude === '' ? null : parseFloat(localLongitude);
+                          const latVal = localLatitude === '' ? undefined : parseFloat(localLatitude);
+                          const lngVal = localLongitude === '' ? undefined : parseFloat(localLongitude);
                           if (localLatitude !== '' && isNaN(latVal!)) {
                             alert('Please enter a valid latitude value');
                             return;
@@ -330,41 +553,7 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* Privacy Tab */}
-            {activeTab === 'privacy' && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold mb-4">Privacy & Data Visibility</h3>
-                <p className="text-gray-600 mb-4">
-                  Control what sensitive data is displayed to staff members
-                </p>
 
-                {[
-                  { key: 'show_student_photos', label: 'Student Photos', desc: 'Display student photos in lists and profiles' },
-                  { key: 'show_parent_contact', label: 'Parent Contact Info', desc: 'Show parent phone numbers and emails' },
-                  { key: 'show_financial_data', label: 'Financial Data', desc: 'Display fee details and payment history' },
-                ].map(privacy => (
-                  <div key={privacy.key} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div>
-                      <div className="font-medium">{privacy.label}</div>
-                      <div className="text-sm text-gray-600">{privacy.desc}</div>
-                    </div>
-                    <button
-                      onClick={() => handleToggle(privacy.key as any, !settings[privacy.key as keyof typeof settings])}
-                      disabled={saving}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        settings[privacy.key as keyof typeof settings] ? 'bg-blue-600' : 'bg-gray-300'
-                      } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          settings[privacy.key as keyof typeof settings] ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
 
             {/* Finance Tab */}
             {activeTab === 'finance' && (
@@ -424,11 +613,6 @@ export default function SettingsPage() {
 
                   <div className="space-y-4">
                     {[
-                      { 
-                        key: 'auto_generate_installment_invoices', 
-                        label: 'Auto-Generate Installment Invoices', 
-                        desc: 'Automatically create invoices when installment due dates approach' 
-                      },
                       { 
                         key: 'auto_apply_late_fee', 
                         label: 'Auto-Apply Late Fees', 
@@ -510,7 +694,7 @@ export default function SettingsPage() {
                       <input
                         type="email"
                         placeholder="school@gmail.com"
-                        value={gatepassForm.gatepass_sender_email || settings?.gatepass_sender_email || ''}
+                        value={gatepassForm.gatepass_sender_email !== undefined ? gatepassForm.gatepass_sender_email : (settings?.gatepass_sender_email || '')}
                         onChange={(e) => setGatepassForm(f => ({ ...f, gatepass_sender_email: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                       />
@@ -522,7 +706,7 @@ export default function SettingsPage() {
                       <input
                         type="password"
                         placeholder="xxxx xxxx xxxx xxxx"
-                        value={gatepassForm.gatepass_app_password || settings?.gatepass_app_password || ''}
+                        value={gatepassForm.gatepass_app_password !== undefined ? gatepassForm.gatepass_app_password : (settings?.gatepass_app_password || '')}
                         onChange={(e) => setGatepassForm(f => ({ ...f, gatepass_app_password: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                       />
@@ -533,15 +717,31 @@ export default function SettingsPage() {
                     </div>
 
                     <div className="p-4 bg-gray-50 rounded-lg">
-                      <label className="block font-medium mb-2 text-sm">Verification Base URL</label>
-                      <input
-                        type="url"
-                        placeholder="http://localhost:3000"
-                        value={gatepassForm.gatepass_verification_base_url || settings?.gatepass_verification_base_url || ''}
-                        onChange={(e) => setGatepassForm(f => ({ ...f, gatepass_verification_base_url: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      <label className="block font-medium mb-2 text-sm">Gate Pass Creation Email Body</label>
+                      <textarea
+                        rows={4}
+                        placeholder="Default template will be used if empty. Use {student_name} to reference the student's name."
+                        value={gatepassForm.gatepass_creation_email_body !== undefined ? gatepassForm.gatepass_creation_email_body : (settings?.gatepass_creation_email_body || '')}
+                        onChange={(e) => setGatepassForm(f => ({ ...f, gatepass_creation_email_body: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm font-sans"
                       />
-                      <p className="text-xs text-gray-500 mt-1">The base URL of your application. QR codes will link to this URL (e.g. https://yourschool.com).</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Custom message sent when a Gate Pass is created. The line <strong>Secret Key: xxxxxx</strong> will always be appended at the end automatically.
+                      </p>
+                    </div>
+
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <label className="block font-medium mb-2 text-sm">Gate Pass Departure Email Body</label>
+                      <textarea
+                        rows={4}
+                        placeholder="Default template will be used if empty. Use {student_name} to reference the student's name."
+                        value={gatepassForm.gatepass_departure_email_body !== undefined ? gatepassForm.gatepass_departure_email_body : (settings?.gatepass_departure_email_body || '')}
+                        onChange={(e) => setGatepassForm(f => ({ ...f, gatepass_departure_email_body: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm font-sans"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Custom message sent when the student scans their pass and departs from the school gate.
+                      </p>
                     </div>
 
                     <button
@@ -549,9 +749,10 @@ export default function SettingsPage() {
                         setGatepassSaving(true);
                         try {
                           await updateSettings({
-                            gatepass_sender_email: gatepassForm.gatepass_sender_email || settings?.gatepass_sender_email,
-                            gatepass_app_password: gatepassForm.gatepass_app_password || settings?.gatepass_app_password,
-                            gatepass_verification_base_url: gatepassForm.gatepass_verification_base_url || settings?.gatepass_verification_base_url,
+                            gatepass_sender_email: gatepassForm.gatepass_sender_email !== undefined ? gatepassForm.gatepass_sender_email : settings?.gatepass_sender_email,
+                            gatepass_app_password: gatepassForm.gatepass_app_password !== undefined ? gatepassForm.gatepass_app_password : settings?.gatepass_app_password,
+                            gatepass_creation_email_body: gatepassForm.gatepass_creation_email_body !== undefined ? gatepassForm.gatepass_creation_email_body : settings?.gatepass_creation_email_body,
+                            gatepass_departure_email_body: gatepassForm.gatepass_departure_email_body !== undefined ? gatepassForm.gatepass_departure_email_body : settings?.gatepass_departure_email_body,
                           });
                           setGatepassSaved(true);
                           setTimeout(() => setGatepassSaved(false), 3000);
