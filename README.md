@@ -1,5 +1,6 @@
 # School OS - Complete Management System
 
+
 A comprehensive school management system built with Django REST Framework and Next.js.
 
 ## 🚀 Features
