@@ -72,6 +72,20 @@ api.interceptors.response.use(
       }
     }
 
+    // Record failed API request in client-side telemetry buffer
+    try {
+      if (typeof window !== 'undefined') {
+        const { FlightRecorder } = require('@/lib/telemetry/flightRecorder');
+        FlightRecorder.recordFailedRequest({
+          url: originalRequest?.url || 'unknown',
+          method: (originalRequest?.method || 'GET').toUpperCase(),
+          status: error.response?.status || 0,
+          status_text: error.response?.statusText || (error.message || 'Network Error'),
+          response_preview: error.response?.data
+        });
+      }
+    } catch {}
+
     return Promise.reject(error);
   }
 );

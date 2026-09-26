@@ -57,6 +57,9 @@ urlpatterns = [
     # Onboarding & Provisioning
     path('api/v1/onboarding/', include('apps.onboarding.urls')),
 
+    # Support & Telemetry
+    path('api/v1/support/', include('apps.support.urls')),
+
     # Direct Report Exports (bypasses ViewSet router)
     path('api/v1/reports/students/', export_students, name='report-students'),
     path('api/v1/reports/attendance/', export_attendance, name='report-attendance'),

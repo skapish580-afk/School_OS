@@ -50,11 +50,20 @@ export default function LoginPage() {
         const userData = profileResponse.data;
         localStorage.setItem('user', JSON.stringify(userData));
 
-        // 5. Redirect based on role
-        if (userData.user_type === 'PLATFORM_ADMIN') {
-          window.location.href = '/owner';
-        } else if (userData.role === 'TEACHER') {
+        // 5. Redirect based on role and redirect query param
+        const searchParams = new URLSearchParams(window.location.search);
+        const redirectParam = searchParams.get('redirect');
+        const userRole = (userData.role || userData.user_type || '').toUpperCase();
+        const isSuper = userData.is_superuser || userData.is_staff || ['SUPER_ADMIN', 'OWNER', 'PLATFORM_ADMIN'].includes(userRole);
+
+        if (redirectParam && redirectParam.startsWith('/')) {
+          window.location.href = redirectParam;
+        } else if (isSuper) {
+          window.location.href = '/platform';
+        } else if (userRole === 'TEACHER') {
           window.location.href = '/teachers';
+        } else if (userRole === 'STUDENT') {
+          window.location.href = '/students';
         } else {
           window.location.href = '/dashboard';
         }

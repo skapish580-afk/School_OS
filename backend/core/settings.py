@@ -66,6 +66,7 @@ INSTALLED_APPS = [
      'apps.assets',
      'apps.onboarding',
      'apps.community',
+     'apps.support',
 ]
 
 

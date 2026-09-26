@@ -52,12 +52,21 @@ export default function SimpleOwnerLogin() {
             // Store user data
             localStorage.setItem('user', JSON.stringify(userData));
 
-            // Step 3: Redirect based on user type
-            if (userData.user_type === 'PLATFORM_ADMIN') {
-                console.log('5. Redirecting to /owner...');
-                window.location.href = '/owner';
+            // Step 3: Redirect based on user type and redirect query param
+            const searchParams = new URLSearchParams(window.location.search);
+            const redirectParam = searchParams.get('redirect');
+            const userRole = (userData.role || userData.user_type || '').toUpperCase();
+            const isSuper = userData.is_superuser || userData.is_staff || ['SUPER_ADMIN', 'OWNER', 'PLATFORM_ADMIN'].includes(userRole);
+
+            if (redirectParam && redirectParam.startsWith('/')) {
+                window.location.href = redirectParam;
+            } else if (isSuper) {
+                window.location.href = '/platform';
+            } else if (userRole === 'TEACHER') {
+                window.location.href = '/teachers';
+            } else if (userRole === 'STUDENT') {
+                window.location.href = '/students';
             } else {
-                console.log('5. Not a platform admin, redirecting to dashboard');
                 window.location.href = '/dashboard';
             }
 

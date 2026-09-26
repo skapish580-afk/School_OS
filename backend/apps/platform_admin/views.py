@@ -18,12 +18,17 @@ from apps.schools.models import School
 
 class IsPlatformAdmin(IsAuthenticated):
     """
-    Check if user is a platform admin
+    Check if user is a platform admin, superuser, or owner
     """
     def has_permission(self, request, view):
         if not super().has_permission(request, view):
             return False
-        return PlatformAdmin.objects.filter(user=request.user).exists()
+        user = request.user
+        if getattr(user, 'is_superuser', False) or getattr(user, 'is_staff', False):
+            return True
+        if getattr(user, 'role', '') in ['SUPER_ADMIN', 'OWNER', 'PLATFORM_ADMIN']:
+            return True
+        return PlatformAdmin.objects.filter(user=user).exists()
 
 
 class SchoolSubscriptionViewSet(viewsets.ModelViewSet):
