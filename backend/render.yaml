@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: school-os-backend
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: python manage.py migrate && gunicorn core.wsgi --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: core.settings
+      - key: SECRET_KEY
+        generateValue: true   # Render auto-generates a secure value
+      - key: DEBUG
+        value: "False"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: school-os-db
+          property: connectionString
+      - key: ALLOWED_HOSTS
+        value: ""             # Leave blank — default includes .onrender.com already
+      - key: CORS_ALLOWED_ORIGINS
+        value: ""             # Set this to your Vercel URL after deploying frontend
+      - key: FRONTEND_URL
+        value: ""             # Set this to your Vercel URL after deploying frontend
+
+databases:
+  - name: school-os-db
+    plan: free

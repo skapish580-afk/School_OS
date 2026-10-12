@@ -21,7 +21,14 @@ DEBUG = _env_bool('DEBUG', True)
 
 SILENCED_SYSTEM_CHECKS = ['auth.E003']
 
-ALLOWED_HOSTS = [h for h in os.getenv('ALLOWED_HOSTS', '').split(',') if h] or ['localhost', '127.0.0.1', 'testserver', '0.0.0.0']
+ALLOWED_HOSTS = [h for h in os.getenv('ALLOWED_HOSTS', '').split(',') if h] or [
+    'localhost',
+    '127.0.0.1',
+    'testserver',
+    '0.0.0.0',
+    '.railway.app',   # Railway production
+    '.onrender.com',  # Render production
+]
 
 # Application definition
 INSTALLED_APPS = [
@@ -72,6 +79,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Serve static files via gunicorn (production)
     'corsheaders.middleware.CorsMiddleware', # Added CORS
     'django.contrib.sessions.middleware.SessionMiddleware',
     
@@ -185,6 +193,8 @@ USE_TZ = True
 
 # Static files
 STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # Required for `collectstatic` in production
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'  # WhiteNoise compressed static files
 
 # --- SCHOOL-OS CUSTOM CONFIGURATION ---
 
@@ -213,12 +223,6 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-# ... existing Static files config ...
-STATIC_URL = 'static/'
-
-
-
-# ... existing settings ...
 
 # --- CORS CONFIGURATION ---
 _cors_env = os.getenv('CORS_ALLOWED_ORIGINS', '')
@@ -228,6 +232,26 @@ CORS_ALLOWED_ORIGINS = [origin for origin in _cors_env.split(',') if origin] or 
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+# --- PRODUCTION SECURITY SETTINGS ---
+# These settings allow HTTP-only cookies (CSRF tokens, session IDs) to be sent
+# across different domains (Vercel frontend <-> Railway/Render backend).
+# They are gated on DEBUG=False so local development is unaffected.
+if not DEBUG:
+    # Cross-domain cookie support (required when frontend and backend are on
+    # different origins, e.g. Vercel + Railway/Render)
+    CSRF_COOKIE_SAMESITE = 'None'
+    SESSION_COOKIE_SAMESITE = 'None'
+    CSRF_COOKIE_SECURE = True      # Only send cookie over HTTPS
+    SESSION_COOKIE_SECURE = True   # Only send session cookie over HTTPS
+
+    # Enforce HTTPS in production
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000         # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
 
 # Media Files (Uploaded by users)
 MEDIA_URL = '/media/'

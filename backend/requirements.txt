@@ -1,4 +1,6 @@
 Django==4.2.16
+gunicorn==22.0.0          # Production WSGI server (Railway / Render)
+whitenoise==6.7.0         # Serve static files from gunicorn without nginx
 djangorestframework==3.15.2
 djangorestframework-simplejwt==5.3.1
 django-cors-headers==4.3.1
