@@ -9,7 +9,7 @@ Pillow==10.4.0
 reportlab>=4.0.0
 
 # PostgreSQL Support (Production)
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.10
 
 # Environment Variables
 python-decouple==3.8
