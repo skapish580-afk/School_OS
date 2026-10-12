@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example   # Always track the example file so teammates know what vars are needed
 
 # vercel
 .vercel
