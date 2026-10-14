@@ -38,6 +38,7 @@ interface Notification {
   priority: string;
   audience_display: string;
   sent_at: string;
+  created_at?: string;
   is_read: boolean;
 }
 
@@ -676,7 +677,7 @@ export default function TeacherDashboard() {
                         <p className="text-sm text-slate-700 leading-relaxed">{notif.message}</p>
                         <p className="text-xs text-slate-400 font-medium mt-2.5 flex items-center gap-1">
                           <Clock size={12} />
-                          {notif.sent_at ? new Date(notif.sent_at).toLocaleString() : new Date(notif.created_at).toLocaleString()}
+                          {notif.sent_at ? new Date(notif.sent_at).toLocaleString() : (notif.created_at ? new Date(notif.created_at).toLocaleString() : '')}
                         </p>
                       </div>
                       {!notif.is_read && (

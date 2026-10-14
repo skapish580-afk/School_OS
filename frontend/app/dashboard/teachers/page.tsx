@@ -1033,7 +1033,7 @@ export default function TeachersPage() {
                       type="number"
                       required
                       min={0}
-                      value={onboardFormData.experience_years !== undefined && onboardFormData.experience_years !== null ? onboardFormData.experience_years : ''}
+                      value={onboardFormData.experience_years !== undefined && onboardFormData.experience_years !== null ? (onboardFormData.experience_years as number | string) : ''}
                       onChange={(e) => setOnboardFormData(prev => ({ ...prev, experience_years: e.target.value !== '' ? parseInt(e.target.value) : '' }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-gray-900"
                     />
