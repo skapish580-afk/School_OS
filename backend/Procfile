@@ -1,1 +1,1 @@
-web: python manage.py migrate && python scripts/populate_features.py && python manage.py collectstatic --noinput && gunicorn core.wsgi --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+web: python manage.py migrate && python scripts/populate_features.py && python scripts/create_system_admin.py && python manage.py collectstatic --noinput && gunicorn core.wsgi --bind 0.0.0.0:$PORT --workers 2 --timeout 120
