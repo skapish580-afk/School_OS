@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import api from '@/lib/api';
 import { Search, X, User, GraduationCap, Loader2, AlertCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -102,10 +102,8 @@ export default function SmartSearch({
 
   const performSearch = async (searchQuery: string) => {
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await axios.get<SearchResponse>(
-        `http://localhost:8000/api/v1/teachers/search/?q=${encodeURIComponent(searchQuery)}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const response = await api.get<SearchResponse>(
+        `/teachers/search/?q=${encodeURIComponent(searchQuery)}`
       );
 
       setResults(response.data);

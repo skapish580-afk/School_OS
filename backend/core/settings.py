@@ -231,6 +231,11 @@ CORS_ALLOWED_ORIGINS = [origin for origin in _cors_env.split(',') if origin] or 
     "http://127.0.0.1:3000",
 ]
 
+# Allow any Vercel preview or production deployment domain automatically
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https:\/\/.*\.vercel\.app$",
+]
+
 CORS_ALLOW_CREDENTIALS = True
 
 # --- PRODUCTION SECURITY SETTINGS ---
@@ -245,7 +250,9 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True      # Only send cookie over HTTPS
     SESSION_COOKIE_SECURE = True   # Only send session cookie over HTTPS
 
-    # Enforce HTTPS in production
+    # Tell Django it's behind Railway/Render HTTPS reverse proxy
+    # Prevents 301 redirects on CORS preflight OPTIONS requests
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
     SECURE_HSTS_SECONDS = 31536000         # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True

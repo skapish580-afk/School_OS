@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import axios from 'axios';
+import api from '@/lib/api';
 
 interface SchoolSettings {
   graduation_point: string | number | readonly string[] | undefined;
@@ -128,9 +128,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      const response = await axios.get('http://localhost:8000/api/v1/schools/settings/my_settings/', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get('/schools/settings/my_settings/');
       setSettings(response.data);
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -141,12 +139,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const updateSettings = async (data: Partial<SchoolSettings>) => {
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await axios.patch(
-        'http://localhost:8000/api/v1/schools/settings/update_my_settings/',
-        data,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await api.patch('/schools/settings/update_my_settings/', data);
       setSettings(response.data);
     } catch (error) {
       console.error('Error updating settings:', error);
