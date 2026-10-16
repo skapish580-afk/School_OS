@@ -52,21 +52,25 @@ api.interceptors.response.use(
             originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
             return api(originalRequest);
           } else {
-            // No refresh token, redirect to login
+            // No refresh token, redirect to login if not already there
             localStorage.removeItem('access_token');
             localStorage.removeItem('refresh_token');
             localStorage.removeItem('user');
-            window.location.href = '/login';
+            if (window.location.pathname !== '/login') {
+              window.location.href = '/login';
+            }
             return Promise.reject(new Error('No refresh token available'));
           }
         }
       } catch (refreshError) {
-        // Refresh failed, redirect to login
+        // Refresh failed, redirect to login if not already there
         if (typeof window !== 'undefined') {
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
           localStorage.removeItem('user');
-          window.location.href = '/login';
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
         }
         return Promise.reject(refreshError);
       }

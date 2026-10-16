@@ -117,6 +117,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const fetchSettings = async () => {
     try {
       const token = localStorage.getItem('access_token');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
       const userStr = localStorage.getItem('user');
 
       // Skip fetching settings for platform admins (they don't have a school)
