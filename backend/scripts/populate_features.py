@@ -1,5 +1,9 @@
 import os
+import sys
 import django
+
+# Ensure backend root directory is in Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Set up Django environment
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
